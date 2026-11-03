@@ -648,7 +648,7 @@ title: Implementing the checkout
 
 ````md magic-move
 ```ts
-async function checkout(input: unknown) {
+async function checkout(input: unknown): Promise<SavedOrder | undefined> {
   const parsed = v.safeParse(CheckoutSchema, input)
   if (!parsed.success) return undefined
 
@@ -666,7 +666,7 @@ async function checkout(input: unknown) {
 ```
 
 ```ts
-async function checkout(input: unknown) {
+async function checkout(input: unknown): Promise<SavedOrder | undefined> {
   const parsed = v.safeParse(CheckoutSchema, input)
   if (!parsed.success) return undefined
 
@@ -689,7 +689,7 @@ function priceOrder(cart, subtotal, discount) {
 ```
 
 ```ts
-async function checkout(input: unknown) {
+async function checkout(input: unknown): Promise<SavedOrder | undefined> {
   const parsed = v.safeParse(CheckoutSchema, input)
   if (!parsed.success) return undefined
 
@@ -710,7 +710,7 @@ async function resolveDiscount(code, subtotal) {
 ```
 
 ```ts
-async function checkout(input: unknown) {
+async function checkout(input: unknown): Promise<SavedOrder | undefined> {
   const validated = parseCheckout(input)
   if (!validated) return undefined
 
@@ -722,7 +722,9 @@ async function checkout(input: unknown) {
 ```
 
 ```ts
-async function checkout(input: unknown) {
+async function checkout(
+  input: unknown,
+): Promise<SavedOrder | R.Failure<ValidationError>> {
   const validated = parseCheckout(input)
   if (R.isFailure(validated)) return validated
 
@@ -734,7 +736,9 @@ async function checkout(input: unknown) {
 ```
 
 ```ts
-async function checkout(input: unknown) {
+async function checkout(
+  input: unknown,
+): Promise<SavedOrder | R.Failure<ValidationError | DiscountError>> {
   const validated = parseCheckout(input)
   if (R.isFailure(validated)) return validated
 
@@ -748,7 +752,10 @@ async function checkout(input: unknown) {
 ```
 
 ```ts
-async function checkout(input: unknown) {
+const checkout: (input: unknown) => R.AsyncResult<
+  SavedOrder,
+  ValidationError | DiscountError | EligibilityError | SaveOrderError
+> = async (input) => {
   const validated = parseCheckout(input)
   if (R.isFailure(validated)) return validated
 
@@ -893,13 +900,70 @@ async function checkout(input: unknown) {
     R.andThen(resolveDiscount),     
     R.andThrough(checkEligibility), 
     R.map(priceOrder),              
-    R.andThen(saveOrder),          // <- Execute a side-effect
+    R.andThen(saveOrder),           // <- Execute a side-effect
   )
 }
 ```
 ````
 
 <!-- Illustrative contracts matching the imperative example, not the final checkout code. R.pipe passes values left to right. R.andThen chains fallible sync or async steps; R.andThrough keeps the input on a successful check; R.map transforms a successful value with a pure function. Failures skip later steps. Handle result at the boundary. Throws and promise rejections are not automatically captured: wrap appropriate APIs. Good imperative code can also be clear; the benefit here is explicit composition, not pipelines for their own sake. -->
+
+---
+layout: two-cols
+kicker: Same workflow, different ergonomics
+title: Checkout across languages
+---
+
+### Rust
+
+```rust
+let validated = parse_checkout(input)?;
+let decision = resolve_discount(validated).await?;
+check_eligibility(&decision)?;
+let priced = price_order(decision);
+save_order(priced).await
+```
+
+### Gleam
+
+```gleam
+use validated <- result.try(parse_checkout(input))
+use decision <- result.try(resolve_discount(validated))
+use _ <- result.try(check_eligibility(decision))
+let priced = price_order(decision)
+save_order(priced)
+```
+
+::right::
+
+### Scala
+
+```scala
+for {
+  validated <- parseCheckout(input)
+  decision  <- resolveDiscount(validated)
+  _         <- checkEligibility(decision)
+  priced     = priceOrder(decision)
+  saved     <- saveOrder(priced)
+} yield saved
+```
+
+### F#
+
+```fsharp
+input
+|> parseCheckout |> AsyncResult.ofResult
+|> AsyncResult.bind resolveDiscount
+|> AsyncResult.check checkEligibilityAsync
+|> AsyncResult.map priceOrder
+|> AsyncResult.bind saveOrder
+```
+
+<!--
+Again, a language like Gleam offers greater ergonomics for that.
+
+But Byethrow is doing a ridiciously good job at prodiving a ergonomic experience.
+-->
 
 ---
 layout: default
@@ -1002,7 +1066,7 @@ left:
     - Supply loadDiscount and saveOrder
     - Connect real adapters to the workflow
 right:
-  title: Use case and tests
+  title: Workflows and tests
   items:
     - Run checkout with business input
     - Replace only the needed functions in tests
@@ -1030,14 +1094,14 @@ const runCheckout = checkoutWorkflow({ loadDiscount, saveOrder })
 const result = await runCheckout(input)
 ```
 
-<!-- Illustrative contracts: resolveDiscount accepts a loadDiscount adapter and returns the workflow step. The composition root supplies real adapters once; tests supply alternatives. The dependency object is a plain value, not a DI framework. Async errors still need to be wrapped at the boundary. -->
+<!--
+Partial application
+-->
 
 ---
 layout: section
 index: "05"
-kicker: Apply
 title: A quick look at ePaper
-subtitle: From the checkout example to our own code.
 ---
 
 <!-- Approximately 4 minutes. The presenter will provide the ePaper source; do not infer implementation details from the project name. -->
@@ -1080,7 +1144,7 @@ export const validateScannedPdfWorkflow = hasDependencies<[ReadFileFromIngestSto
     // Talk to the outside world
     readFileFromIngestStorage(uploadedPdfFilePath, options),
     
-    // Core pure business logic
+    // Pure business logic
     R.andThen((file) => isZipArchive(file.content) ? extractScannedPdfFromZip(file.content) : R.succeed(file)),
     R.andThen(R.parse(UploadedPdfSchema)),
     R.andThrough((file) => R.parse(AllowedExtensionSchema, file.fileName)),
@@ -1098,55 +1162,20 @@ export const validateScannedPdfWorkflow = hasDependencies<[ReadFileFromIngestSto
 <!-- The supplied validateScannedPdfWorkflow snippet is a candidate for this walkthrough. Confirm it against the project source and trace UploadedPdf → ValidatedPdf, the checks that preserve the input, and the final storage adapter. -->
 
 ---
-layout: end
-title: Make the domain visible
-subtitle: Valid values · explicit failures · composable workflows · focused dependencies
----
-
-<!-- One minute. Start with domain language, reject invalid inputs at boundaries, model meaningful state changes and keep dependencies focused. Apply these tools where they clarify the problem. Questions, or continue to the optional material. -->
-
----
-layout: section
-index: "+"
-kicker: Optional · 15–20 minutes
-title: Go a little deeper
-subtitle: Language comparisons, error boundaries and Reader.
----
-
-<!-- Optional extension: 4 minutes for languages, 4–5 for a workflow and adapter trace, 4–5 for Reader, and 3–6 for discussion or a deeper ePaper walkthrough. -->
-
----
 layout: default
-aside: Language comparison
-kicker: Optional · 4 min
-title: One domain choice, four languages
----
-
-- Compare the same small type in Rust, Kotlin, Gleam and TypeScript
-- Show how each expresses alternatives and matches them
-- Compare controlled construction and runtime validation
-
-<!-- Placeholder for small, equivalent examples. Focus on the idea rather than teaching syntax. Add actual smart constructors and verify each language's visibility rules before claiming an invariant is enforced. -->
-
----
-layout: default
-aside: Error handling
+aside: Enforcing patterns
 kicker: Optional · 4–5 min
-title: Trace a failed checkout
+title: Custom lint rules
 ---
 
-- A supplied discount code is unknown or ineligible
-- Follow the same branch in both implementations
-- Which steps run, and which are skipped?
-- Wrap an async SDK rejection; check HTTP status separately
-
-<!-- Compare effect order and tests. Do not equate an HTTP error status with a rejected fetch. Discuss what belongs in a domain failure versus an infrastructure error or unexpected bug. -->
+- Show oxlint rules
+- byethrow linting rules
 
 ---
 layout: default
 aside: Advanced
 kicker: Optional · 4–5 min
-title: Reader as a dependency pattern
+title: Reader Monat as a dependency pattern
 ---
 
 - A computation that needs an environment
@@ -1155,6 +1184,14 @@ title: Reader as a dependency pattern
 - Partial application is the starting intuition
 
 <!-- Placeholder for a small verified Scala example and equivalent TypeScript. Reader describes a computation depending on an environment; it does not by itself handle async operations or errors. Keep this clearly optional and avoid assuming a Scala library dependency. -->
+
+---
+layout: end
+title: Make the domain visible
+subtitle: Valid values · explicit failures · composable workflows · focused dependencies
+---
+
+<!-- One minute. Start with domain language, reject invalid inputs at boundaries, model meaningful state changes and keep dependencies focused. Apply these tools where they clarify the problem. Questions, or continue to the optional material. -->
 
 ---
 layout: default
