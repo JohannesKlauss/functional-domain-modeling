@@ -468,6 +468,27 @@ if(R.isSuccess(result)) {
   result.value // <- unknown
 }
 ```
+
+```ts
+const result = parseOrder(input)
+
+if(R.isSuccess(result)) {
+  const schemaResult = v.safeParse(OrderSchema, result.value)
+  
+  if (schemaResult.success) {
+    const {data} = schemaResult // type Order
+    
+    switch (order.kind) {
+      case 'unvalidated': return 'Not priced'
+      case 'validated': return 'Not priced'
+      case 'priced': return order.amount.toString()
+      default:
+        const exhaustive: never = order
+        return exhaustive
+    }
+  }
+}
+```
 ````
 
 <!-- R.fn creates a reusable function with the same arguments; its catch maps a thrown value to a failure. The success value remains unknown until schema validation. Wrap only failures the caller can meaningfully handle. R is the Result namespace from byethrow. -->
@@ -476,7 +497,7 @@ if(R.isSuccess(result)) {
 layout: section
 index: "03"
 kicker: Compose
-title: A use case as a pipeline
+title: Model workflows as pipelines
 subtitle: Each step transforms a meaningful domain value.
 ---
 
@@ -488,7 +509,32 @@ kicker: Start with the familiar
 title: Build checkout imperatively
 ---
 
+````md magic-move
 ```ts
+// unknown => Promise<undefined | ReturnType<OrderRepository['save']>
+async function checkout(input: unknown) {
+  const parsed = v.safeParse(CheckoutSchema, input)
+  if (!parsed.success) return undefined
+
+  const { cart, discountCode } = parsed.output
+  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  let discount = null
+  if (discountCode !== null) {
+    discount = await discountRepository.findByCode(discountCode)
+    if (!discount) throw new Error('Unknown discount code')
+    if (subtotal < discount.minimumTotal) throw new Error('Discount not eligible')
+  }
+  const total = Math.max(0, subtotal - (discount?.amountOff ?? 0))
+  return orderRepository.save({ cart, total })
+}
+```
+
+```ts
+// unknown => 
+//   | R.AsyncResult<never, ParseCheckoutError>
+//   | R.AsyncResult<never, ResolveDiscountError>
+//   | R.AsyncResult<never, CheckEligibilityError>
+//   | Promise<ReturnType<OrderRepository['save']>
 async function checkout(input: unknown) {
   const validated = parseCheckout(input)
   if (R.isFailure(validated)) return validated
@@ -503,12 +549,12 @@ async function checkout(input: unknown) {
   return saveOrder(priced)
 }
 ```
+````
 
-<!-- Illustrative contracts, not the final checkout implementation. Early returns are a perfectly reasonable approach. resolveDiscount handles no code and fails for an unknown supplied code; checkEligibility rejects an ineligible discount. Preserve these rules and effect order when the real code is supplied. -->
+<!-- First show the familiar implementation: safeParse checks input, while validation, discount lookup, business rules, pricing and persistence live together. It throws for expected failures; repository calls can also reject. Ask what becomes harder as the workflow grows. On the next click, introduce extracted functions returning Result for expected failures, while retaining imperative early returns. The no-code path remains valid; unknown and ineligible codes fail. priceOrder is pure, and saveOrder returns a Result. Exceptions or rejections must still be handled at the appropriate boundary. These are illustrative contracts, not the final checkout implementation. -->
 
 ---
 layout: default
-kicker: Ask the room
 title: What happens as the workflow grows?
 ---
 
@@ -523,16 +569,24 @@ title: What happens as the workflow grows?
 <!-- Pause for discussion before revealing the points. This is a trade-off, not a bug: early returns remain a valid and often readable approach. -->
 
 ---
-layout: steps
+layout: default
 kicker: Arrows as values
 title: The domain changes at each step
-steps:
-  - { title: Request, desc: Untrusted input }
-  - { title: ValidatedCheckout, desc: Valid request and cart }
-  - { title: DiscountDecision, desc: No discount or a loaded discount }
-  - { title: PricedOrder, desc: Order with a calculated total }
-  - { title: SavedOrder, desc: Persisted order or receipt }
 ---
+
+<div class="steps" style="display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: stretch">
+  <div style="grid-column: 2; grid-row: 1 / 4; justify-self: center; border-left: 1px dashed var(--fg-dim)"></div>
+  <div class="card" style="grid-column: 1; grid-row: 1"><div class="step-title">Request</div><div class="step-desc">Untrusted input</div></div>
+  <div class="arrow" style="grid-column: 2; grid-row: 1">→</div>
+  <div class="card" style="grid-column: 3; grid-row: 1"><div class="step-title">ValidatedCheckout</div><div class="step-desc">Valid request and cart</div></div>
+  <div class="arrow" style="grid-column: 4; grid-row: 1">→</div>
+  <div class="card" style="grid-column: 5; grid-row: 1"><div class="step-title">DiscountDecision</div><div class="step-desc">No discount or a loaded discount</div></div>
+  <div style="grid-column: 2; grid-row: 2; z-index: 1; background: var(--bg); color: var(--fg-dim); font-size: 0.65rem">boundary</div>
+  <div style="grid-column: 5; grid-row: 2; color: var(--accent); font-size: 1.3rem; font-weight: 700">↓</div>
+  <div class="card" style="grid-column: 1; grid-row: 3"><div class="step-title">SavedOrder</div><div class="step-desc">Persisted order or receipt</div></div>
+  <div class="arrow" style="grid-column: 2; grid-row: 3">←</div>
+  <div class="card" style="grid-column: 3 / 6; grid-row: 3"><div class="step-title">PricedOrder</div><div class="step-desc">Order with a calculated total</div></div>
+</div>
 
 <!-- The intended chain is unknown request → ValidatedCheckout → CheckoutWithDiscountDecision → PricedOrder → SavedOrder. Each arrow is a function with a contract; output from one becomes input to the next. The discount-decision value retains the cart for pricing. The names are working names to finalize with the code. -->
 
