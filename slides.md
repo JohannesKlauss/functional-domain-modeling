@@ -10,20 +10,24 @@ kicker: Space Review
 subtitle: Making domain rules visible in types and workflows
 ---
 
-<!-- 30-minute core, with optional deep dives after the conclusion. This is an outline: the checkout implementation and ePaper walkthrough will be developed together. -->
-
 ---
 layout: agenda
-kicker: The story
+kicker: Let's talk about
 title: From domain rules to workflows
 items:
-  - { topic: Domain Creation, desc: Create meaningful domain values }
+  - { topic: Domain Creation, desc: Enforce domain invariants }
   - { topic: Errors as Values, desc: Make expected failures explicit }
   - { topic: Pipelines, desc: Compose domain transformations }
-  - { topic: Adapters & DI, desc: Connect the workflow to the outside world }
+  - { topic: Adapters & DI, desc: Connect workflows to the outside world }
 ---
 
-<!-- We already use DDD. This talk is about making the domain language and its rules visible in code, using functional techniques without requiring a new language. Opening and setup: 2 minutes. -->
+<!--
+I wanted to do something else.
+
+But no time, so we learn about how to express AND enforce your domain while keeping it extendable and composable.
+
+At the end examples from ePaper
+-->
 
 ---
 layout: steps
@@ -36,20 +40,39 @@ steps:
   - { title: Save, desc: Persist the order }
 ---
 
-<!-- A non-empty cart and an optional code. A supplied code must exist and meet a minimum cart total. Invalid input, an unknown code and an ineligible code are expected failures. Leave payment, shipping and inventory out of scope. Use integer minor currency units. We begin with an order-state illustration, then return to checkout for the workflow. -->
+<!--
+Classic eCommerce example.
+Goal: persist valid order from non-empty cart.
+
+We keep everything very simple intentionally.
+
+A supplied discount code must exist and meet a minimum cart total to be eligible.
+
+We use integers as our money unit, so 1699 would be 16,99€.
+
+These steps will show why imperative style often falls short of production grade software that keeps being maintainable.
+-->
 
 ---
 layout: steps
 kicker: From the domain to the code
 title: The technical journey
 steps:
-- { title: Domain Creation, desc: Create valid domain values }
-- { title: Errors as Values, desc: Make expected failures explicit }
-- { title: Pipelines, desc: Compose smaller steps into workflows }
-- { title: Adapters, desc: Connect dependencies at the domain boundary }
+  - { title: Domain Creation, desc: Create valid domain values }
+  - { title: Errors as Values, desc: Make expected failures explicit }
+  - { title: Pipelines, desc: Compose smaller steps into workflows }
+  - { title: Adapters, desc: Connect dependencies at the domain boundary }
 ---
 
-<!-- agenda -->
+<!--
+So first let's model the possible order states we can get, then return to checkout for the workflow.
+
+Then we look at how we can treat Errors as first class citizens.
+
+After promotions of Errors to first class citizens, we can easily start composing smaller steps into bigger workflows.
+
+How  can our tidy domain survives contact with the outside world?
+-->
 
 ---
 layout: section
@@ -58,8 +81,6 @@ kicker: Model
 title: Make invalid states unrepresentable
 subtitle: Start by asking which combinations actually make sense.
 ---
-
-<!-- Domain modeling section: approximately 7 minutes total, including the boundary and validation examples. -->
 
 ---
 layout: code
@@ -71,44 +92,57 @@ title: What states can this order represent?
 ```ts
 type Order = {
   orderId: string
-  isValidated: boolean
-  isPriced: boolean
-  amountToBill?: number
+  articles: Article[]
 }
 ```
 
 ```ts
 type Order = {
   orderId: string
+  articles: Article[]
+  isValidated: boolean
+}
+```
+
+```ts
+type Order = {
+  orderId: string
+  articles: Article[]
   isValidated: boolean
   isPriced: boolean
-  amountToBill?: number
+  amount?: number
+}
+```
+
+```ts
+type Order = {
+  orderId: string
+  articles: Article[]
+  isValidated: boolean
+  isPriced: boolean
+  amount?: number
 }
 
 const order: Order = {
   orderId: '123',
+  articles: [...],
   isValidated: false,
   isPriced: true,
 }
 ```
 ````
 
-<!-- Ask what combinations the type allows before revealing the example. Adapted to TypeScript from Domain Modeling Made Functional, chapter 7, “Modeling an Order as a Set of States,” pp. 122–124. The type permits a priced order that has not been validated and has no amount to bill. The book specifically points out that amountToBill must be present when an order is priced, but the record does not enforce it. -->
+<!--
+This is the usual approach. An order is an order is an order.
 
----
-layout: code
-kicker: Model a choice
-title: One type for each order state
----
+First we start out with a simple order that has articles.
 
-```ts
-type Order =
-  | { kind: 'unvalidated'; orderId: string }
-  | { kind: 'validated'; orderId: string }
-  | { kind: 'priced'; orderId: string; amountToBill: number }
-```
+Then we might want to check if that order is legit. So we add a flag.
 
-<!-- Adapted from Wlaschin's separate UnvalidatedOrder, ValidatedOrder and PricedOrder types and the union of order states. A priced order now requires an amount; there is no combination of isValidated and isPriced flags to contradict each other. In a real model each variant carries the appropriate validated or unvalidated data, not just an ID. The union encodes the shape of the states, not proof that validation and pricing actually happened: controlled constructors, transitions and boundary validation still matter. This leads directly to the checkout pipeline and its transformations. -->
+Add discounts, etc., add pricing component. Another flag to check if the order has been priced and a number that shows the total to bill the customer.
+
+So what is the problem here?
+-->
 
 ---
 layout: steps
@@ -120,7 +154,45 @@ steps:
   - { title: Construct, desc: Return a trusted value object }
 ---
 
-<!-- Creating valid values: approximately 3 minutes within the domain modeling section. Compare smart constructors in Rust, F# and Gleam with a Valibot schema and safeParse in TypeScript. Schemas check runtime data; encapsulation and branded types may help preserve guarantees after validation. Add the checkout schema and constructor together later. -->
+<!--
+How to define and enforce domain invariants to construct a value object (or aggregate) that the domain can trust as valid?
+
+Having trusted domain objects removes the need for defensive programming:
+checking validity everywhere, handling errors and failures explicitly <- Amounts to a lot of code **not building the product**
+-->
+
+---
+layout: code
+kicker: Model a choice
+title: One type for each order state
+---
+
+````md magic-move
+```ts
+type Order = {
+  orderId: string
+  articles: Article[]
+  isValidated: boolean
+  isPriced: boolean
+  amount?: number
+}
+```
+
+```ts
+type Order =
+  | { kind: 'unvalidated'; orderId: string; articles: Article[] }
+  | { kind: 'validated'; orderId: string; articles: Article[] }
+  | { kind: 'priced'; orderId: string; articles: Article[]; amount: number }
+```
+````
+
+<!--
+First step: A tagged union represents **variants** of  or **perspectives** on an Order
+
+In FP it is called a ADT
+
+Sum Types / Product Types
+-->
 
 ---
 layout: code
@@ -131,21 +203,22 @@ title: What's wrong here?
 ````md magic-move
 ```ts
 type Order =
-  | { kind: 'unvalidated'; orderId: string }
-  | { kind: 'validated'; orderId: string }
-  | { kind: 'priced'; orderId: string; amountToBill: number }
+  | { kind: 'unvalidated'; orderId: string; articles: Article[] }
+  | { kind: 'validated'; orderId: string; articles: Article[] }
+  | { kind: 'priced'; orderId: string; articles: Article[]; amount: number }
 ```
 
 ```ts
 type Order =
-  | { kind: 'unvalidated'; orderId: string }
-  | { kind: 'validated'; orderId: string }
-  | { kind: 'priced'; orderId: string; amountToBill: number }
+  | { kind: 'unvalidated'; orderId: string; articles: Article[] }
+  | { kind: 'validated'; orderId: string; articles: Article[] }
+  | { kind: 'priced'; orderId: string; articles: Article[]; amount: number }
 
 const order: Order = {
   kind: 'priced',
+  articles: [],
   orderId: 'not-an-order-id',
-  amountToBill: -100,
+  amount: -100,
 }
 ```
 
@@ -154,23 +227,35 @@ import * as v from 'valibot'
 
 const OrderId = v.pipe(v.string(), v.uuid(), v.brand('OrderId'))
 const Amount = v.pipe(v.number(), v.safeInteger(), v.minValue(0), v.brand('Amount'))
+const Article = v.object({name: v.string(), price: Amount}),
 
 const OrderSchema = v.variant('kind', [
-  v.object({ kind: v.literal('unvalidated'), orderId: OrderId }),
-  v.object({ kind: v.literal('validated'), orderId: OrderId }),
-  v.object({ kind: v.literal('priced'), orderId: OrderId, amountToBill: Amount }),
+  v.object({ kind: v.literal('unvalidated'), orderId: OrderId, articles: v.array(Article) }),
+  v.object({ kind: v.literal('validated'), orderId: OrderId, articles: v.array(Article) }),
+  v.object({ kind: v.literal('priced'), orderId: OrderId, articles: v.array(Article), amount: Amount }),
 ])
+
 type Order = v.InferOutput<typeof OrderSchema>
 
 const result = v.safeParse(OrderSchema, {
-  kind: 'priced', orderId: 'not-an-order-id', amountToBill: -100,
+  kind: 'priced', orderId: 'not-an-order-id', amount: -100,
 })
 
 result.error // true
 ```
 ````
 
-<!-- The original union constrains the shape, but accepts any string and number. In general every basic language type system is way too wide to enforce domain invariants. For this example, assume order IDs are UUIDs and amounts are non-negative integer minor currency units. safeParse returns a failure for the example; validation runs at runtime. Brands help prevent unvalidated primitives being assigned to the inferred type, but assertions, any, or mutation can bypass guarantees. The schema checks shape and values, not whether the order actually passed through validation or pricing. -->
+<!--
+Tagged union constraints the shape, not values.
+
+Primitive language types are **way too wide** to enforce domain invariants.
+
+Nobody hinders you to create an invalid aggregate
+
+Typescript has Standard Schema to define and enforce invariants
+
+Here valibot, same in zod, ArkType, Typia, etc.
+-->
 
 ---
 layout: two-cols
@@ -219,7 +304,15 @@ type Order =
   | { kind: 'priced'; orderId: string; amount: number }
 ```
 
-<!-- Briefly compare Rust enum variants, Gleam custom types, Kotlin sealed hierarchies and TypeScript tagged unions. Kotlin uses sealed subtypes; TypeScript uses object shapes and a discriminant. These examples show state shape, not the UUID and non-negative amount invariants from the Valibot example: those require validation and controlled construction regardless of syntax. The numeric types have different ranges and TypeScript number also permits fractions. -->
+<!--
+Rust: Enums on Steroids
+
+Gleam: Proper ADTs
+
+Kotlin: sealed / data class
+
+Typescript: Tagged Union
+-->
 
 ---
 layout: two-cols
@@ -272,7 +365,20 @@ switch (order.kind) {
 }
 ```
 
-<!-- These are excerpts using the Order types from the preceding slide; Gleam's int.to_string requires import gleam/int. Each match extracts the amount only in the priced case. Rust and Gleam require exhaustive matches; Kotlin requires an exhaustive when for this sealed hierarchy and smart-casts the priced branch. TypeScript narrows by kind, but a switch alone does not enforce exhaustiveness. The never assignment makes a missing variant a compile-time error; an explicit return type with strictNullChecks or noImplicitReturns can also catch missing return paths. -->
+<!--
+Using ADTs allows for powerful control flows.
+
+More concise than if/else, but more expressive:
+More paths/arms can be handles in less code
+
+In this slightly reduced example we can i.e. check the variant to return either the amount or a string.
+
+Rust, Gleam and Kotlins pattern matching is exhaustive.
+
+Typescript does not have pattern matching. The ergonomics start to fall apart here a bit.
+
+But there is a proposal to add pattern matching. JavaScript isn't typed, so it will be weird.
+-->
 
 ---
 layout: two-cols
@@ -326,7 +432,11 @@ switch (order.kind) {
 }
 ```
 
-<!-- Illustrative routing rule: a priced order above 100 minor units goes to review; all other priced orders are processed. Guards are checked after the state matches, so keep an unguarded priced branch for the remaining values. Kotlin when guards are stable in Kotlin 2.2; older versions can use an if inside the priced branch. TypeScript has no equivalent switch guard, so the condition goes inside its narrowed case. The wildcard/else branches here combine the other states; adding another state would not trigger an exhaustiveness warning for those examples. -->
+<!--
+Example on guarding match arms.
+
+Again Typescript hacks lack ergonomics of modern languages
+-->
 
 ---
 layout: section
@@ -336,11 +446,13 @@ title: Make failures visible
 subtitle: What can go wrong, and how does the caller know?
 ---
 
-<!-- Bridge from safeParse: validation can fail, so how do we make that failure part of the contract? Approximately 4 minutes. -->
+<!--
+Bridge from safeParse: validation can fail, so how do we make that failure part of the contract?
+-->
 
 ---
 layout: code
-kicker: Start with the familiar
+kicker: The imperative way
 title: What is wrong with this type?
 ---
 
@@ -353,33 +465,50 @@ type ParseOrder = (input: string) => Order
 type ParseOrder = (input: string) => Order
 
 // Compiles just fine
-const parseOrder: ParseOrder = (input: string): Order => JSON.parse(text) as Order
+const parseOrder: ParseOrder = (input: string): Order => JSON.parse(input) as Order
 ```
 
 ```ts
 type ParseOrder = (input: string) => Order
 
-//                                      ┌─── Apparently any string returns an valid order
-//                                      │                                  ┌─── Unsafe Casting
-//                                      ▼                                  ▼ 
+//                                     ┌─── Any string returns a valid order
+//                                     │                                   ┌─── Trust me bro!
+//                                     ▼                                   ▼ 
 const parseOrder: ParseOrder = (input: string): Order => JSON.parse(input) as Order
 ```
 ````
 
-<!-- Ask the audience what the signature tells us and what it leaves out. JSON.parse throws a SyntaxError for malformed JSON, but TypeScript does not declare thrown exceptions in the return type. unknown correctly says the parsed shape is untrusted. try/catch is a valid approach; callers need to know where it is needed. -->
+<!--
+What's wrong with this type signature?
+
+The signature is lying to you and so is the typescript compiler:
+
+This function throws and you need to know the behavior of JSON.parse to know that.
+
+To understand the behavior of the function you call, you need to look into the implementation, which defeats the purpose of a type signature.
+
+try/catch: callers need to know where it is needed and clutters code with error handling instead of building the product.
+-->
 
 ---
 layout: define
 kicker: Errors as values
 term: "A → Result&lt;B, Error&gt;"
-definition: A function transforms <span class="accent2">A into B</span>, or returns an expected failure.
+definition: A function transforms <span class="accent2">A into B</span>, or
+  returns an expected failure.
 points:
   - Success contains B; failure contains an error.
   - The return type makes expected failure visible.
   - The caller decides how to handle it.
 ---
 
-<!-- A Result makes expected failures visible in the return type. It does not prove that a function cannot throw. Use the actual checkout types as the example when the code is ready. Both sync and async Results can participate in byethrow pipelines. -->
+<!--
+A Result makes expected failures visible in the return type.
+
+It does not prevent the function from throwing, but linting can.
+
+Again: modern languages like Gleam, Rust don't even allow to throw. You have to use Result to indicate failure.
+-->
 
 ---
 layout: code
@@ -390,18 +519,18 @@ title: Turn an exception into a Result
 ````md magic-move
 ```ts
 // (input: string) => Order
-const parseOrder = (input: string): Order => JSON.parse(text) as Order
+const parseOrder = (input: string): Order => JSON.parse(input) as Order
 
-const result = parseOrder(input) // can throw and nobody will tell you about
+const result = parseOrder(input) // can throw and nothing will tell you
 ```
 
 ```ts
 import { Result as R } from '@praha/byethrow'
 
 // (input: string) => Order
-const parseOrder = (input: string): Order => JSON.parse(text) as Order
+const parseOrder = (input: string): Order => JSON.parse(input) as Order
 
-const result = parseOrder(input) // can throw and nobody will tell you about
+const result = parseOrder(input) // can throw and nothing will tell you
 ```
 
 ```ts
@@ -468,6 +597,15 @@ if(R.isSuccess(result)) {
   result.value // <- unknown
 }
 ```
+````
+
+<!-- R.fn creates a reusable function with the same arguments; its catch maps a thrown value to a failure. The success value remains unknown until schema validation. Wrap only failures the caller can meaningfully handle. R is the Result namespace from byethrow. -->
+
+---
+layout: code
+kicker: Wrapping throwing APIs
+title: Turn an exception into a Result
+---
 
 ```ts
 const result = parseOrder(input)
@@ -489,7 +627,6 @@ if(R.isSuccess(result)) {
   }
 }
 ```
-````
 
 <!-- R.fn creates a reusable function with the same arguments; its catch maps a thrown value to a failure. The success value remains unknown until schema validation. Wrap only failures the caller can meaningfully handle. R is the Result namespace from byethrow. -->
 
@@ -505,13 +642,12 @@ subtitle: Each step transforms a meaningful domain value.
 
 ---
 layout: code
-kicker: Start with the familiar
-title: Build checkout imperatively
+kicker: The imperative way
+title: Implementing the checkout
 ---
 
 ````md magic-move
 ```ts
-// unknown => Promise<undefined | ReturnType<OrderRepository['save']>
 async function checkout(input: unknown) {
   const parsed = v.safeParse(CheckoutSchema, input)
   if (!parsed.success) return undefined
@@ -530,11 +666,88 @@ async function checkout(input: unknown) {
 ```
 
 ```ts
-// unknown => 
-//   | R.AsyncResult<never, ParseCheckoutError>
-//   | R.AsyncResult<never, ResolveDiscountError>
-//   | R.AsyncResult<never, CheckEligibilityError>
-//   | Promise<ReturnType<OrderRepository['save']>
+async function checkout(input: unknown) {
+  const parsed = v.safeParse(CheckoutSchema, input)
+  if (!parsed.success) return undefined
+
+  const { cart, discountCode } = parsed.output
+  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  let discount = null
+  if (discountCode !== null) {
+    discount = await discountRepository.findByCode(discountCode)
+    if (!discount) throw new Error('Unknown discount code')
+    if (subtotal < discount.minimumTotal) throw new Error('Discount not eligible')
+  }
+  const priced = priceOrder(cart, subtotal, discount)
+  return orderRepository.save(priced)
+}
+
+function priceOrder(cart, subtotal, discount) {
+  const total = Math.max(0, subtotal - (discount?.amountOff ?? 0))
+  return { cart, total }
+}
+```
+
+```ts
+async function checkout(input: unknown) {
+  const parsed = v.safeParse(CheckoutSchema, input)
+  if (!parsed.success) return undefined
+
+  const { cart, discountCode } = parsed.output
+  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  const discount = await resolveDiscount(discountCode, subtotal)
+  const priced = priceOrder(cart, subtotal, discount)
+  return orderRepository.save(priced)
+}
+
+async function resolveDiscount(code, subtotal) {
+  if (code === null) return null
+  const discount = await discountRepository.findByCode(code)
+  if (!discount) throw new Error('Unknown discount code')
+  if (subtotal < discount.minimumTotal) throw new Error('Discount not eligible')
+  return discount
+}
+```
+
+```ts
+async function checkout(input: unknown) {
+  const validated = parseCheckout(input)
+  if (!validated) return undefined
+
+  const decision = await resolveDiscount(validated)
+  checkEligibility(decision)
+  const priced = priceOrder(decision)
+  return orderRepository.save(priced)
+}
+```
+
+```ts
+async function checkout(input: unknown) {
+  const validated = parseCheckout(input)
+  if (R.isFailure(validated)) return validated
+
+  const decision = await resolveDiscount(validated.value)
+  checkEligibility(decision)
+  const priced = priceOrder(decision)
+  return orderRepository.save(priced)
+}
+```
+
+```ts
+async function checkout(input: unknown) {
+  const validated = parseCheckout(input)
+  if (R.isFailure(validated)) return validated
+
+  const decision = await resolveDiscount(validated.value)
+  if (R.isFailure(decision)) return decision
+
+  checkEligibility(decision.value)
+  const priced = priceOrder(decision.value)
+  return orderRepository.save(priced)
+}
+```
+
+```ts
 async function checkout(input: unknown) {
   const validated = parseCheckout(input)
   if (R.isFailure(validated)) return validated
@@ -551,7 +764,7 @@ async function checkout(input: unknown) {
 ```
 ````
 
-<!-- First show the familiar implementation: safeParse checks input, while validation, discount lookup, business rules, pricing and persistence live together. It throws for expected failures; repository calls can also reject. Ask what becomes harder as the workflow grows. On the next click, introduce extracted functions returning Result for expected failures, while retaining imperative early returns. The no-code path remains valid; unknown and ineligible codes fail. priceOrder is pure, and saveOrder returns a Result. Exceptions or rejections must still be handled at the appropriate boundary. These are illustrative contracts, not the final checkout implementation. -->
+<!-- Start with safeParse, discount lookup, business rules, pricing and persistence together. Extract pricing, then discount lookup and eligibility; their behavior has not changed. Next extract parsing and separate the eligibility check: resolveDiscount carries the validated cart, subtotal and optional discount in a decision for the later steps. Then change parsing, discount resolution and eligibility one at a time to return Results, keeping imperative early returns. Finally saveOrder is an adapter returning a Result; it translates expected persistence failures at the boundary. The no-code path remains valid, while unknown and ineligible codes fail. Validation now returns a descriptive failure instead of undefined; other unexpected exceptions or rejections still need appropriate handling. Helper implementations and types omitted from later frames are illustrative, not the final checkout code. -->
 
 ---
 layout: default
@@ -596,15 +809,95 @@ kicker: Compose the same steps
 title: From imperative checkout to a pipeline
 ---
 
+````md magic-move
 ```ts
-const result = await R.pipe(
-  parseCheckout(input),
-  R.andThen(resolveDiscount),
-  R.andThrough(checkEligibility),
-  R.map(priceOrder),
-  R.andThen(saveOrder),
-)
+async function checkout(input: unknown) {
+  const validated = parseCheckout(input)
+  if (R.isFailure(validated)) return validated
+
+  const decision = await resolveDiscount(validated.value)
+  if (R.isFailure(decision)) return decision
+
+  const eligible = checkEligibility(decision.value)
+  if (R.isFailure(eligible)) return eligible
+
+  const priced = priceOrder(decision.value)
+  return saveOrder(priced)
+}
 ```
+
+```ts
+async function checkout(input: unknown) {
+  R.pipe(
+    parseCheckout(input),
+    R.andThen(resolveDiscount),
+    R.andThrough(checkEligibility),
+    R.map(priceOrder),
+    R.andThen(saveOrder),
+  )
+}
+```
+
+```ts
+async function checkout(input: unknown) {
+  R.pipe(
+    parseCheckout(input),           // <- Kick off a transformation
+    R.andThen(resolveDiscount),
+    R.andThrough(checkEligibility),
+    R.map(priceOrder),
+    R.andThen(saveOrder),
+  )
+}
+```
+
+```ts
+async function checkout(input: unknown) {
+  R.pipe(
+    parseCheckout(input),          
+    R.andThen(resolveDiscount),     // <- Operate on the Success value otherwise return Error
+    R.andThrough(checkEligibility),
+    R.map(priceOrder),
+    R.andThen(saveOrder),
+  )
+}
+```
+
+```ts
+async function checkout(input: unknown) {
+  R.pipe(
+    parseCheckout(input),          
+    R.andThen(resolveDiscount),     
+    R.andThrough(checkEligibility), // <- Check domain invariants otherwise return Error
+    R.map(priceOrder),
+    R.andThen(saveOrder),
+  )
+}
+```
+
+```ts
+async function checkout(input: unknown) {
+  R.pipe(
+    parseCheckout(input),          
+    R.andThen(resolveDiscount),     
+    R.andThrough(checkEligibility), 
+    R.map(priceOrder),              // <- Map the Success value from one type to another
+    R.andThen(saveOrder),
+  )
+}
+```
+
+```ts
+async function checkout(input: unknown) {
+  R.pipe(
+    parseCheckout(input),          
+    R.andThen(resolveDiscount),     
+    R.andThrough(checkEligibility), 
+    R.map(priceOrder),              
+    R.andThen(saveOrder),          // <- Execute a side-effect
+  )
+}
+```
+````
 
 <!-- Illustrative contracts matching the imperative example, not the final checkout code. R.pipe passes values left to right. R.andThen chains fallible sync or async steps; R.andThrough keeps the input on a successful check; R.map transforms a successful value with a pure function. Failures skip later steps. Handle result at the boundary. Throws and promise rejections are not automatically captured: wrap appropriate APIs. Good imperative code can also be clear; the benefit here is explicit composition, not pipelines for their own sake. -->
 
@@ -625,7 +918,7 @@ title: What did the pipeline give us?
 layout: section
 index: "04"
 kicker: Connect
-title: Dependencies in the language of the use case
+title: DI & Repositories
 subtitle: What does checkout actually need from the outside world?
 ---
 
@@ -633,7 +926,7 @@ subtitle: What does checkout actually need from the outside world?
 
 ---
 layout: code
-kicker: Start with the familiar
+kicker: The imperative way
 title: What does checkout need from a repository?
 ---
 
@@ -677,11 +970,11 @@ type DiscountRepository = {
 ```ts
 type LoadDiscount = (
   code: DiscountCode,
-) => Promise<R.Result<Discount, DiscountLookupError>>
+) => R.AsyncResult<Discount, DiscountLookupError>
 
 type SavePricedOrder = (
   order: PricedOrder,
-) => Promise<R.Result<SavedOrder, SaveOrderError>>
+) => R.AsyncResult<SavedOrder, SaveOrderError>
 ```
 ````
 
@@ -701,7 +994,7 @@ title: What changes for checkout?
 
 ---
 layout: vs
-kicker: Dependency injection
+kicker: Simple Dependency injection
 title: Bind dependencies once
 left:
   title: Composition root
@@ -719,12 +1012,12 @@ right:
 
 ---
 layout: code
-kicker: Dependency injection
+kicker: Simple Dependency injection
 title: Supply dependencies, then run checkout
 ---
 
 ```ts
-const checkout = (deps: CheckoutDependencies) => (input: unknown) =>
+const checkoutWorkflow = (deps: CheckoutDependencies) => (input: unknown) =>
   R.pipe(
     parseCheckout(input),
     R.andThen(resolveDiscount(deps.loadDiscount)),
@@ -733,7 +1026,7 @@ const checkout = (deps: CheckoutDependencies) => (input: unknown) =>
     R.andThen(deps.saveOrder),
   )
 
-const runCheckout = checkout({ loadDiscount, saveOrder })
+const runCheckout = checkoutWorkflow({ loadDiscount, saveOrder })
 const result = await runCheckout(input)
 ```
 
@@ -752,15 +1045,55 @@ subtitle: From the checkout example to our own code.
 ---
 layout: default
 kicker: ePaper walkthrough
-title: Follow one real workflow
+title: Validate a Scanned PDF
 ---
 
-- Where domain values are created and validated
-- Which focused adapter functions it needs
-- How values move through the workflow
-- Where dependencies are supplied
+````md magic-move
+```ts
+export const validateScannedPdfWorkflow = hasDependencies<[ReadFileFromIngestStorage, MovePdfToValidatedStorage]>()
+(async (
+  [readFileFromIngestStorage, movePdfToValidatedStorage],
+  uploadedPdfFilePath: string,
+  options?: ETagCondition,
+) => {
+  return R.pipe(
+    readFileFromIngestStorage(uploadedPdfFilePath, options),
+    R.andThen((file) => isZipArchive(file.content) ? extractScannedPdfFromZip(file.content) : R.succeed(file)),
+    R.andThen(R.parse(UploadedPdfSchema)),
+    R.andThrough((file) => R.parse(AllowedExtensionSchema, file.fileName)),
+    R.andThrough((file) => checkPdfForSizeLimit(file.sizeInBytes)),
+    R.andThrough((file) => parseJournalDateFromFileName(file.fileName)),
+    R.andThen(R.parse(ValidatedPdfSchema)),
+    R.andThen((validatedPdf) => movePdfToValidatedStorage(validatedPdf, uploadedPdfFilePath, options)),
+  )
+})
+```
 
-<Callout>Placeholder: select the real files and code together.</Callout>
+```ts
+export const validateScannedPdfWorkflow = hasDependencies<[ReadFileFromIngestStorage, MovePdfToValidatedStorage]>()
+(async (
+  [readFileFromIngestStorage, movePdfToValidatedStorage],
+  uploadedPdfFilePath: string,
+  options?: ETagCondition,
+) => {
+  return R.pipe(
+    // Talk to the outside world
+    readFileFromIngestStorage(uploadedPdfFilePath, options),
+    
+    // Core pure business logic
+    R.andThen((file) => isZipArchive(file.content) ? extractScannedPdfFromZip(file.content) : R.succeed(file)),
+    R.andThen(R.parse(UploadedPdfSchema)),
+    R.andThrough((file) => R.parse(AllowedExtensionSchema, file.fileName)),
+    R.andThrough((file) => checkPdfForSizeLimit(file.sizeInBytes)),
+    R.andThrough((file) => parseJournalDateFromFileName(file.fileName)),
+    R.andThen(R.parse(ValidatedPdfSchema)),
+    
+    // Talk to the outside world
+    R.andThen((validatedPdf) => movePdfToValidatedStorage(validatedPdf, uploadedPdfFilePath, options)),
+  )
+})
+```
+````
 
 <!-- The supplied validateScannedPdfWorkflow snippet is a candidate for this walkthrough. Confirm it against the project source and trace UploadedPdf → ValidatedPdf, the checks that preserve the input, and the final storage adapter. -->
 
@@ -830,8 +1163,24 @@ kicker: Further reading
 title: Sources and inspiration
 ---
 
-- Scott Wlaschin, [Domain Modeling Made Functional](https://partners.pragprog.com/catalog/517)
-- Debasish Ghosh, [Functional and Reactive Domain Modeling](https://www.oreilly.com/library/view/functional-and-reactive/9781617292248/)
-- Alexis King, [Parse, don't validate](https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/)
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 180px; gap: 2rem; align-items: center">
+<div>
+
+- Scott Wlaschin - [Domain Modeling Made Functional](https://partners.pragprog.com/catalog/517)
+- Debasish Ghosh - [Functional and Reactive Domain Modeling](https://www.oreilly.com/library/view/functional-and-reactive/9781617292248/)
+- Alexis King - [Parse, don't validate](https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/)
+- Richard Feldman - [Functional Programming for Pragmatists](https://www.youtube.com/watch?v=3n17wHe5wEw)
+- Rich Hickey - [Simple Made Easy](https://www.youtube.com/watch?v=SxdOUGdseq4)
+- Alexander Granin - [Functional Design and Architecture](https://www.manning.com/books/functional-design-and-architecture)
+
+</div>
+<div style="text-align: center; font-family: var(--font-mono)">
+  <div style="color: var(--accent); font-size: 0.65rem; letter-spacing: 0.1em; margin-bottom: 0.5rem">REPO LINK</div>
+  <a href="https://github.com/JohannesKlauss/functional-domain-modeling" style="display: block; position: relative; padding: 10px; border: 1px solid var(--accent); background: #101010; clip-path: polygon(0 12px, 12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%)">
+    <img src="/repository-qr.svg" alt="QR code linking to the presentation repository" style="display: block; width: 100%; filter: invert(1)">
+  </a>
+  <img src="/logo.svg" alt="Spaceteams" style="width: 100px; margin: 0.8rem auto 0">
+</div>
+</div>
 
 <!-- The talk draws on both books but focuses on domain modeling and composition, not on all aspects of reactive systems. -->
