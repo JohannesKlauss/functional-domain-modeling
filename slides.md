@@ -346,23 +346,23 @@ title: What is wrong with this type?
 
 ````md magic-move
 ```ts
-type ParseOrder = (rawJsonString: string) => Order
+type ParseOrder = (input: string) => Order
 ```
 
 ```ts
-type ParseOrder = (rawJsonString: string) => Order
+type ParseOrder = (input: string) => Order
 
 // Compiles just fine
-const parseOrder: ParseOrder = (rawJsonString: string): Order => JSON.parse(text) as Order
+const parseOrder: ParseOrder = (input: string): Order => JSON.parse(text) as Order
 ```
 
 ```ts
-type ParseOrder = (rawJsonString: string) => Order
+type ParseOrder = (input: string) => Order
 
-//                                             ┌─── Apparently any string returns an valid order
-//                                             │                                  ┌─── Unsafe Casting
-//                                             ▼                                  ▼ 
-const parseOrder: ParseOrder = (rawJsonString: string): Order => JSON.parse(text) as Order
+//                                      ┌─── Apparently any string returns an valid order
+//                                      │                                  ┌─── Unsafe Casting
+//                                      ▼                                  ▼ 
+const parseOrder: ParseOrder = (input: string): Order => JSON.parse(input) as Order
 ```
 ````
 
@@ -387,34 +387,90 @@ kicker: Wrapping throwing APIs
 title: Turn an exception into a Result
 ---
 
+````md magic-move
+```ts
+// (input: string) => Order
+const parseOrder = (input: string): Order => JSON.parse(text) as Order
+
+const result = parseOrder(input) // can throw and nobody will tell you about
+```
+
 ```ts
 import { Result as R } from '@praha/byethrow'
 
-// (text: string) => R.Result<unknown, Error>
-const parseJson = R.fn({
-  try: (text: string) => JSON.parse(text) as unknown,
-  catch: (cause) => new Error('Invalid JSON', { cause }),
-})
+// (input: string) => Order
+const parseOrder = (input: string): Order => JSON.parse(text) as Order
 
-const result = parseJson(input)
+const result = parseOrder(input) // can throw and nobody will tell you about
 ```
-
-<!-- R.fn creates a reusable function with the same arguments; its catch maps a thrown value to a failure. The success value remains unknown until schema validation. Wrap only failures the caller can meaningfully handle. R is the Result namespace from byethrow. -->
-
----
-layout: code
-kicker: One-off operations
-title: Execute once with R.try
----
 
 ```ts
-const result = R.try({
-  try: () => JSON.parse(input) as unknown,
+import { Result as R } from '@praha/byethrow'
+
+// (input: string) => R.Result<unknown, Error>
+const parseOrder = R.fn({
+  try: (input: string) => JSON.parse(input) as unknown,
   catch: (cause) => new Error('Invalid JSON', { cause }),
 })
+
+const result = parseOrder(input) // will never throw
 ```
 
-<!-- R.try executes immediately; R.fn produces a reusable function. With catch, both also convert rejected promises into failures. In a checkout adapter the same pattern can wrap an SDK or database call. A fetch resolving with a 404 or 500 is not a rejection: check response.ok explicitly. Neither wrapper validates the parsed JSON shape or catches exceptions elsewhere. -->
+```ts
+import { Result as R } from '@praha/byethrow'
+
+// (input: string) => R.Result<unknown, Error>
+const parseOrder = R.fn({
+  try: (input: string) => JSON.parse(input) as unknown,
+  catch: (cause) => new Error('Invalid JSON', { cause }),
+})
+
+const result = parseOrder(input) // will never throw
+
+export class JsonParsingError extends ErrorFactory({
+  name: "JsonParsingError",
+  message: ({ input }) => `Unable to parse '${input}' to JSON.`,
+  fields: ErrorFactory.fields<{ input: string }>(),
+}) {}
+```
+
+```ts
+import { Result as R } from '@praha/byethrow'
+
+// (input: string) => R.Result<unknown, JsonParsingError>
+const parseOrder = R.fn({
+  try: (input: string) => JSON.parse(input) as unknown,
+  catch: (cause) => new JsonParsingError({ input, cause }),
+})
+
+const result = parseOrder(input) // will never throw
+
+export class JsonParsingError extends ErrorFactory({
+  name: "JsonParsingError",
+  message: ({ input }) => `Unable to parse '${input}' to JSON.`,
+  fields: ErrorFactory.fields<{ input: string }>(),
+}) {}
+```
+
+```ts
+import { Result as R } from '@praha/byethrow'
+
+// (input: string) => R.Result<unknown, JsonParsingError>
+const parseOrder = R.fn({
+  try: (input: string) => JSON.parse(input) as unknown,
+  catch: (cause) => new JsonParsingError({ input, cause }),
+})
+
+const result = parseOrder(input)
+
+// How can we transform `unknown` into `Order` in a safe way?
+if(R.isSuccess(result)) {
+  result.value // <- unknown
+}
+```
+````
+
+<!-- R.fn creates a reusable function with the same arguments; its catch maps a thrown value to a failure. The success value remains unknown until schema validation. Wrap only failures the caller can meaningfully handle. R is the Result namespace from byethrow. -->
 
 ---
 layout: section
