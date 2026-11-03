@@ -1,0 +1,17 @@
+{
+  "name": "fdm-presentation",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "slidev slides.md --open",
+    "build": "slidev build slides.md",
+    "export": "slidev export slides.md"
+  },
+  "devDependencies": {
+    "@slidev/cli": "^53.0.0",
+    "@slidev/theme-default": "^0.25.0",
+    "echarts": "^6.1.0",
+    "katex": "^0.16.47",
+    "slidev-theme-tahta": "^0.13.4"
+  }
+}
