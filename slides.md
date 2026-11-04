@@ -752,7 +752,7 @@ async function checkout(
 ```
 
 ```ts
-const checkout: (input: unknown) => R.AsyncResult<
+const checkout: (input: unknown) => R.ResultAsync<
   SavedOrder,
   ValidationError | DiscountError | EligibilityError | SaveOrderError
 > = async (input) => {
@@ -952,11 +952,11 @@ for {
 
 ```fsharp
 input
-|> parseCheckout |> AsyncResult.ofResult
-|> AsyncResult.bind resolveDiscount
-|> AsyncResult.check checkEligibilityAsync
-|> AsyncResult.map priceOrder
-|> AsyncResult.bind saveOrder
+|> parseCheckout |> ResultAsync.ofResult
+|> ResultAsync.bind resolveDiscount
+|> ResultAsync.check checkEligibilityAsync
+|> ResultAsync.map priceOrder
+|> ResultAsync.bind saveOrder
 ```
 
 <!--
@@ -1034,11 +1034,11 @@ type DiscountRepository = {
 ```ts
 type LoadDiscount = (
   code: DiscountCode,
-) => R.AsyncResult<Discount, DiscountLookupError>
+) => R.ResultAsync<Discount, DiscountLookupError>
 
 type SavePricedOrder = (
   order: PricedOrder,
-) => R.AsyncResult<SavedOrder, SaveOrderError>
+) => R.ResultAsync<SavedOrder, SaveOrderError>
 ```
 ````
 
