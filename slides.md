@@ -120,7 +120,7 @@ Add Loyalty Points for recurring customers, but not if they use a discount onlin
 
 Where does that functionality go?
 
-Also... where is the order process in this diagram?
+Also... where is the order process in this diagram? Where is the behavior?
 -->
 
 ---
@@ -131,11 +131,12 @@ title: How does composition grow?
 
 ### Composed workflows
 
-<div style="text-align: center">
+<div style="display: grid; text-align: center">
+<div v-click-hide="1" style="grid-area: 1 / 1">
 
 ```mermaid
 flowchart LR
-  createOrder --> StoreOrder & OnlineOrder
+  validateOrder --> StoreOrder & OnlineOrder
   StoreOrder --> LocalDiscount[applyDiscount]
   StoreOrder --> LocalLoyalty[grantLoyaltyPoints]
   LocalDiscount[applyDiscount] --> ShippedOrder
@@ -147,10 +148,31 @@ flowchart LR
 ```
 
 </div>
+<div v-click="1" style="grid-area: 1 / 1">
+
+```mermaid
+flowchart LR
+  validateOrder --> StoreOrder & OnlineOrder
+  StoreOrder --> LocalDiscount[applyDiscount]
+  StoreOrder --> LocalLoyalty[grantLoyaltyPoints]
+  LocalDiscount[applyDiscount] --> ShippedOrder
+  LocalLoyalty[grantLoyaltyPoints] --> ShippedOrder
+  OnlineOrder --> OnlineDiscount[applyDiscount]
+  OnlineOrder --> Express[applyExpress] --> OnlineLoyalty[grantLoyaltyPoints]
+  OnlineLoyalty --> ShippedOrder
+  OnlineDiscount --> ShippedOrder
+  classDef orderType fill:#a8d8ea,stroke:#36748a,color:#102a33
+  classDef orderFunction fill:#f9d99a,stroke:#a36c19,color:#382606
+  class StoreOrder,OnlineOrder,ShippedOrder orderType
+  class validateOrder,LocalDiscount,LocalLoyalty,OnlineDiscount,Express,OnlineLoyalty orderFunction
+```
+
+</div>
+</div>
 
 - Small functions transform the order type
-
 - each handles its own applicable rule.
+- functions transform types
 
 <!--
 In a composed workflow
@@ -158,6 +180,8 @@ In a composed workflow
 Just slot in the functionality wherever the process needs it.
 
 Do you see the process and rules here?
+
+Let's see how we can get there
 -->
 
 ---
@@ -172,10 +196,9 @@ steps:
 ---
 
 <!--
-Classic eCommerce example.
-Goal: persist valid order from non-empty cart.
+Validate and persist order from non-empty cart.
 
-We keep everything very simple intentionally.
+We keep everything very simple intentionally. But the composition hopefully will become clear.
 
 A supplied discount code must exist and meet a minimum cart total to be eligible.
 
@@ -328,7 +351,7 @@ Sum Types / Product Types
 ---
 layout: code
 kicker: Parse external values
-title: What's wrong here?
+title: Enforcing invariants
 ---
 
 ````md magic-move
