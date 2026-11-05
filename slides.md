@@ -99,7 +99,8 @@ flowchart TB
   StoreOrder --> StoreDiscount[Discounted]
   OnlineDiscount
   OnlineExpress -.-> Loyalty1[+ LoyaltyPoints?]
-  StoreDiscount -.-> Loyalty3[+ LoyaltyPoints?]
+  StoreDiscount -.-> Loyalty2[+ LoyaltyPoints?]
+  StoreOrder -.-> Loyalty3[+ LoyaltyPoints?]
 ```
 
 </div>
@@ -128,16 +129,21 @@ kicker: Composition over inheritance
 title: How does composition grow?
 ---
 
-### Inheritance hierarchy
+### Composed workflows
 
 <div style="text-align: center">
 
 ```mermaid
 flowchart LR
-  Order[Order] --> Channel[OnlineOrder or LocalOrder]
-  Channel --> Discount[applyDiscount if eligible]
-  Discount --> Express[applyExpress if requested]
-  Express --> Loyalty[grantLoyaltyPoints if eligible]
+  createOrder --> StoreOrder & OnlineOrder
+  StoreOrder --> LocalDiscount[applyDiscount]
+  StoreOrder --> LocalLoyalty[grantLoyaltyPoints]
+  LocalDiscount[applyDiscount] --> ShippedOrder
+  LocalLoyalty[grantLoyaltyPoints] --> ShippedOrder
+  OnlineOrder --> OnlineDiscount[applyDiscount] 
+  OnlineOrder --> Express[applyExpress] --> OnlineLoyalty[grantLoyaltyPoints]
+  OnlineLoyalty --> ShippedOrder
+  OnlineDiscount --> ShippedOrder
 ```
 
 </div>
@@ -149,7 +155,9 @@ flowchart LR
 <!--
 In a composed workflow
 
-Just slot in the functionality wherever the process needs it
+Just slot in the functionality wherever the process needs it.
+
+Do you see the process and rules here?
 -->
 
 ---
