@@ -58,10 +58,10 @@ We want to model
 ---
 layout: default
 kicker: Composition over inheritance
-title: How does a Inheritance system grow?
+title: How does a inheritance grow?
 ---
 
-<div style="display: grid">
+<div style="display: grid; text-align: center">
 <div v-click-hide="1" style="grid-area: 1 / 1">
 
 ```mermaid
@@ -86,7 +86,7 @@ flowchart TB
 flowchart TB
   Order --> OnlineOrder & StoreOrder
   OnlineOrder --> OnlineDiscount[Discounted] & OnlineExpress[Express]
-  StoreOrder --> StoreDiscount[Discounted] & StoreExpress[Express]
+  StoreOrder --> StoreDiscount[Discounted]
 ```
 
 </div>
@@ -96,11 +96,10 @@ flowchart TB
 flowchart TB
   Order --> OnlineOrder & StoreOrder
   OnlineOrder --> OnlineDiscount[Discounted] & OnlineExpress[Express]
-  StoreOrder --> StoreDiscount[Discounted] & StoreExpress[Express]
+  StoreOrder --> StoreDiscount[Discounted]
   OnlineDiscount
   OnlineExpress -.-> Loyalty1[+ LoyaltyPoints?]
   StoreDiscount -.-> Loyalty3[+ LoyaltyPoints?]
-  StoreExpress
 ```
 
 </div>
@@ -114,21 +113,24 @@ Ordering system for your small local shop.
 
 Business goes well -> Online Shop.
 
-Add discounts and express shipping around holidays like christmas.
+Add discounts and online express shipping around holidays like christmas.
 
-Add Loyalty Points for recurring customers, but not if they use a discount online or the express checkout of your local shop.
+Add Loyalty Points for recurring customers, but not if they use a discount online.
 
 Where does that functionality go?
+
+Also... where is the order process in this diagram?
 -->
 
 ---
 layout: default
 kicker: Composition over inheritance
-title: How does the system grow?
+title: How does composition grow?
 ---
 
 ### Inheritance hierarchy
 
+<div style="text-align: center">
 
 ```mermaid
 flowchart LR
@@ -138,36 +140,17 @@ flowchart LR
   Express --> Loyalty[grantLoyaltyPoints if eligible]
 ```
 
+</div>
+
 - Small functions transform the order type
 
 - each handles its own applicable rule.
 
 <!--
-Let's imagine:
-Ordering system for your small local shop.
+In a composed workflow
 
-Business goes well -> Online Shop.
-
-Add discounts and express shipping around holidays like christmas.
-
-Add Loyalty Points for recurring customers, but not if they use a discount online or the express checkout of your local shop.
-
-Where does that functionality go?
+Just slot in the functionality wherever the process needs it
 -->
-
----
-layout: default
-title: Why?
----
-
-<v-clicks>
-
-- Avoid state wherever possible
-- Explicit side effects
-- Invalid values that don't exist in your domain can't be created
-- Composable and extensible
-
-</v-clicks>
 
 ---
 layout: steps
