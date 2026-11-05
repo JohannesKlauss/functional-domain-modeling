@@ -239,7 +239,7 @@ subtitle: Start by asking which combinations actually make sense.
 ---
 layout: code
 kicker: Modeling an Order as a fat struct
-title: You domain is not static
+title: Your domain is not static
 ---
 
 ````md magic-move
@@ -254,7 +254,7 @@ type Order = {
 type Order = {
   orderId: string
   articles: Article[]
-  isValidated: boolean
+  isOnline: boolean
 }
 ```
 
@@ -262,9 +262,10 @@ type Order = {
 type Order = {
   orderId: string
   articles: Article[]
-  isValidated: boolean
-  isPriced: boolean
-  amount?: number
+  isOnline: boolean
+  isExpress: boolean
+  isDiscounted: boolean
+  discount?: number
 }
 ```
 
@@ -272,16 +273,18 @@ type Order = {
 type Order = {
   orderId: string
   articles: Article[]
-  isValidated: boolean
-  isPriced: boolean
-  amount?: number
+  isOnline: boolean
+  isExpress: boolean
+  isDiscounted: boolean
+  discount?: number
 }
 
 const order: Order = {
   orderId: '123',
-  articles: [...],
-  isValidated: false,
-  isPriced: true,
+  articles: [],
+  isOnline: false,
+  isExpress: true,
+  isDiscounted: true,
 }
 ```
 ````
@@ -289,13 +292,13 @@ const order: Order = {
 <!--
 This is the usual approach. An order is an order is an order.
 
-First we start out with a simple order that has articles.
+Let's model our domain
 
-Then we might want to check if that order is legit. So we add a flag.
+But the type allows an order to be marked discounted without a discount, be an express order for an order made at the store.
 
-Add discounts, etc., add pricing component. Another flag to check if the order has been priced and a number that shows the total to bill the customer.
+None of these combinations are allowed in the domain, but they are representable by our Order Type.
 
-So what is the problem here?
+How can we rule out those combinations?
 -->
 
 ---
