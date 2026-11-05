@@ -10,6 +10,14 @@ kicker: Space Review
 subtitle: Making domain rules visible in types and workflows
 ---
 
+<!--
+Wanted to do something else.
+
+But no time, so let's learn about how to express AND enforce your domain while keeping it extendable and composable.
+
+At the end examples from ePaper
+-->
+
 ---
 layout: agenda
 kicker: Let's talk about
@@ -21,13 +29,74 @@ items:
   - { topic: Adapters & DI, desc: Connect workflows to the outside world }
 ---
 
+---
+layout: default
+kicker: The idea
+title: What is functional domain modeling?
+---
+
+<v-clicks>
+
+- Think about the problem in terms of **domain types**, not objects
+- Use types to express meaningful values, choices, and rules
+- Use composition over inheritance (separate data & behavior)
+- Model use cases as functions that transform values
+- `type CreateDownloadLink = PublicationId => URL`
+
+</v-clicks>
+
 <!--
-I wanted to do something else.
+What is functional domain modeling?
 
-But no time, so we learn about how to express AND enforce your domain while keeping it extendable and composable.
+Instead of having a bunch of string, numbers and bools cobbled together we want to express domain rules and intent with our types and their names
 
-At the end examples from ePaper
+We want to compose functionality, not inherit from it. Inheritance is always coupling and we do not wan't to couple. We want to stay flexible.
+
+We want to model 
 -->
+
+---
+layout: two-cols
+kicker: Composition over inheritance
+title: How does the system grow?
+---
+
+### Inheritance hierarchy
+
+```mermaid
+flowchart TB
+  Order --> OnlineOrder & StoreOrder
+  OnlineOrder --> OnlineDiscount[Discounted] & OnlineExpress[Express]
+  StoreOrder --> StoreDiscount[Discounted] & StoreExpress[Express]
+  OnlineDiscount -.-> Gift1[+ GiftWrap?]
+  OnlineExpress -.-> Gift2[+ GiftWrap?]
+  StoreDiscount -.-> Gift3[+ GiftWrap?]
+  StoreExpress -.-> Gift4[+ GiftWrap?]
+```
+
+::right::
+
+### Composed workflow
+
+```mermaid
+flowchart LR
+  Validate[validate] --> Discount[discount] --> Save[save]
+  Gift[giftWrap] -. add a step .-> Discount
+```
+
+---
+layout: default
+title: Why?
+---
+
+<v-clicks>
+
+- Avoid state wherever possible
+- Explicit side effects
+- Invalid values that don't exist in your domain can't be created
+- Composable and extensible
+
+</v-clicks>
 
 ---
 layout: steps
@@ -58,10 +127,10 @@ layout: steps
 kicker: From the domain to the code
 title: The technical journey
 steps:
-  - { title: Domain Creation, desc: Create valid domain values }
+  - { title: Value Creation, desc: Create valid domain values }
   - { title: Errors as Values, desc: Make expected failures explicit }
   - { title: Pipelines, desc: Compose smaller steps into workflows }
-  - { title: Adapters, desc: Connect dependencies at the domain boundary }
+  - { title: Adapters, desc: Talk to the Database }
 ---
 
 <!--
@@ -85,7 +154,7 @@ subtitle: Start by asking which combinations actually make sense.
 ---
 layout: code
 kicker: Modeling an Order as a fat struct
-title: What states can this order represent?
+title: You domain is not static
 ---
 
 ````md magic-move
@@ -631,6 +700,24 @@ if(R.isSuccess(result)) {
 <!-- R.fn creates a reusable function with the same arguments; its catch maps a thrown value to a failure. The success value remains unknown until schema validation. Wrap only failures the caller can meaningfully handle. R is the Result namespace from byethrow. -->
 
 ---
+layout: default
+kicker: A first look at monads
+title: Think of an array as a box
+---
+
+```ts
+const boxed = [2]
+const doubled = boxed.map(n => n * 2)         // [4]
+const choices = boxed.flatMap(n => [n, n * 2]) // [2, 4]
+```
+
+- **Box:** an array holds zero, one, or many values
+- **map:** transform each value, keeping the array context
+- **flatMap:** chain a function that returns arrays into one array
+
+<!-- The box is an analogy, not a definition: an array can hold multiple values. A monad also has a way to put a value in the context, such as [value], and a flatMap operation for chaining contextual computations. These operations must obey the monad laws. Result follows the same broad pattern, but its context represents success or failure instead of multiple values. -->
+
+---
 layout: section
 index: "03"
 kicker: Compose
@@ -835,7 +922,7 @@ async function checkout(input: unknown) {
 
 ```ts
 async function checkout(input: unknown) {
-  R.pipe(
+  return R.pipe(
     parseCheckout(input),
     R.andThen(resolveDiscount),
     R.andThrough(checkEligibility),
@@ -847,7 +934,7 @@ async function checkout(input: unknown) {
 
 ```ts
 async function checkout(input: unknown) {
-  R.pipe(
+  return R.pipe(
     parseCheckout(input),           // <- Kick off a transformation
     R.andThen(resolveDiscount),
     R.andThrough(checkEligibility),
@@ -859,7 +946,7 @@ async function checkout(input: unknown) {
 
 ```ts
 async function checkout(input: unknown) {
-  R.pipe(
+  return R.pipe(
     parseCheckout(input),          
     R.andThen(resolveDiscount),     // <- Operate on the Success value otherwise return Error
     R.andThrough(checkEligibility),
@@ -871,7 +958,7 @@ async function checkout(input: unknown) {
 
 ```ts
 async function checkout(input: unknown) {
-  R.pipe(
+  return R.pipe(
     parseCheckout(input),          
     R.andThen(resolveDiscount),     
     R.andThrough(checkEligibility), // <- Check domain invariants otherwise return Error
@@ -883,7 +970,7 @@ async function checkout(input: unknown) {
 
 ```ts
 async function checkout(input: unknown) {
-  R.pipe(
+  return R.pipe(
     parseCheckout(input),          
     R.andThen(resolveDiscount),     
     R.andThrough(checkEligibility), 
@@ -895,12 +982,12 @@ async function checkout(input: unknown) {
 
 ```ts
 async function checkout(input: unknown) {
-  R.pipe(
+  return R.pipe(
     parseCheckout(input),          
     R.andThen(resolveDiscount),     
     R.andThrough(checkEligibility), 
     R.map(priceOrder),              
-    R.andThen(saveOrder),           // <- Execute a side-effect
+    R.andThen(saveOrder),           // <- Chain a fallible save
   )
 }
 ```
@@ -952,11 +1039,11 @@ for {
 
 ```fsharp
 input
-|> parseCheckout |> ResultAsync.ofResult
-|> ResultAsync.bind resolveDiscount
-|> ResultAsync.check checkEligibilityAsync
-|> ResultAsync.map priceOrder
-|> ResultAsync.bind saveOrder
+|> parseCheckout |> AsyncResult.ofResult
+|> AsyncResult.bind resolveDiscount
+|> AsyncResult.check checkEligibilityAsync
+|> AsyncResult.map priceOrder
+|> AsyncResult.bind saveOrder
 ```
 
 <!--
@@ -977,6 +1064,72 @@ title: What did the pipeline give us?
 - Smaller steps can be tested and reused independently
 
 <!-- Ask the audience to compare with the early-return version. Both approaches can be readable and testable; combinators centralize the repeated success/failure plumbing, at the cost of learning the abstraction. -->
+
+---
+layout: code
+kicker: Pipeline pitfalls
+title: Do not use failure to skip a normal branch
+---
+
+```ts
+const resolveDiscount = (loadDiscount: LoadDiscount) => (
+  checkout: ValidatedCheckout,
+): R.ResultAsync<CheckoutWithDiscountDecision, DiscountLookupError> => {
+  if (checkout.discountCode === null) {
+    return Promise.resolve(R.succeed({ ...checkout, discount: null }))
+  }
+  return R.pipe(
+    loadDiscount(checkout.discountCode),
+    R.map(discount => ({ ...checkout, discount })),
+  )
+}
+```
+
+- No code supplied is a valid decision: **continue to pricing**
+- An unknown or ineligible supplied code is a failure: **stop checkout**
+
+<!-- Contrast this with returning a failure such as NoDiscount to skip the lookup: every later andThen, andThrough and map would also be skipped, including pricing and saving. Branch inside the step and return a success containing the unchanged or appropriately transformed domain value. Failure can be appropriate for a genuine early exit, but do not disguise ordinary branching as an error. -->
+
+---
+layout: code
+kicker: Pipeline pitfalls
+title: Do not overwrite an earlier failure
+---
+
+```ts
+R.pipe(
+  parseCheckout(input),
+  R.andThen(resolveDiscount(loadDiscount)),
+  R.mapError(() => new Error('Discount lookup failed')),
+)
+```
+
+A validation failure also becomes “Discount lookup failed”.
+
+```ts
+R.pipe(
+  parseCheckout(input),
+  R.andThen(checkout => R.pipe(
+    resolveDiscount(loadDiscount)(checkout),
+    R.mapError(cause => new Error('Discount lookup failed', { cause })),
+  )),
+)
+```
+
+<!-- mapError applies to any failure reaching that point, including failures from earlier steps whose success callbacks were skipped. Mapping inside the discount step limits the translation to lookup failures; preserving cause retains diagnostic context. Alternatively, leave the original error unchanged. Translating all errors at a boundary can be intentional, but retain the distinctions and details that callers or logs need. -->
+
+---
+layout: default
+kicker: Pipeline pitfalls
+title: What can still go wrong?
+---
+
+- **Thrown exceptions or rejected promises escape** unless explicitly captured at a boundary
+- **The wrong combinator loses intent:** use `map` for a pure transformation, `andThen` for a fallible step, `andThrough` for a check that preserves its input
+- **The first failure stops the chain:** validate independently when you need to report multiple errors
+- **Decoded JSON is still untrusted:** validate its shape and value invariants before using it
+
+<!-- R.fn or R.try can adapt a throwing API, but a Result pipeline does not catch arbitrary exceptions automatically. Use a validation strategy that accumulates independent errors when the user needs all of them; sequential dependent steps still require short-circuiting. Choose recovery deliberately rather than silently turning every failure into a default. -->
 
 ---
 layout: section
@@ -1076,7 +1229,7 @@ right:
 
 ---
 layout: code
-kicker: Simple Dependency injection
+kicker: Dependency injection · partial application
 title: Supply dependencies, then run checkout
 ---
 
@@ -1094,13 +1247,82 @@ const runCheckout = checkoutWorkflow({ loadDiscount, saveOrder })
 const result = await runCheckout(input)
 ```
 
-<!--
-Partial application
--->
+<!-- Supply the environment once at the composition root; the returned function accepts business input later. Tests can bind test adapters instead. This is plain functions, with no DI framework or Reader library. -->
+
+---
+layout: code
+kicker: Dependency injection · Reader
+title: Compose computations that need an environment
+---
+
+```ts
+type Reader<Env, A> = (env: Env) => A
+
+const flatMap = <Env, A, B>(
+  reader: Reader<Env, A>,
+  next: (value: A) => Reader<Env, B>,
+): Reader<Env, B> => env => next(reader(env))(env)
+
+const getLoad: Reader<CheckoutDependencies, LoadDiscount> =
+  env => env.loadDiscount
+const getSave: Reader<CheckoutDependencies, SavePricedOrder> =
+  env => env.saveOrder
+
+const checkoutReader = flatMap(getLoad, loadDiscount =>
+  env => checkoutWorkflow({ loadDiscount, saveOrder: getSave(env) }),
+)
+const runCheckout = checkoutReader({ loadDiscount, saveOrder })
+```
+
+<!-- Reader is an environment-dependent function. flatMap composes computations that share the same environment; running checkoutReader supplies it once and returns the input-taking workflow from the previous slide. This is a minimal, library-free illustration, not a recommendation to use Reader for two dependencies. It does not itself handle the workflow's Result or asynchronous effects. -->
 
 ---
 layout: section
 index: "05"
+kicker: Trade-offs
+title: What does this cost us?
+subtitle: Explicit effects help, but abstractions have a price.
+---
+
+---
+layout: code
+kicker: Effects do not combine automatically
+title: "Reader + Result: two layers to compose"
+---
+
+```ts
+type Reader<Env, A> = (env: Env) => A
+
+type CheckedPrice = Reader<PricingEnv,
+  R.Result<PricedOrder, PricingError>>
+
+declare const price: CheckedPrice
+declare const save: (order: PricedOrder) =>
+  Reader<PricingEnv, R.Result<SavedOrder, SaveOrderError>>
+```
+
+- Reader's `flatMap` receives a **Result**, not a `PricedOrder`
+- Result's `andThen` cannot supply `PricingEnv` to `save`
+- Use explicit plumbing or a combined type such as `ReaderResult`; async adds another layer
+
+<!-- Reader flatMap passes the inner value, here a Result, to the next Reader. Result andThen can compose fallible functions, but does not supply an environment to a Reader-returning function. One option is to pass env explicitly and chain the Result inside that function; another is a purpose-built combined type with appropriate combinators. Transformers and effect libraries can help, but introduce their own concepts and constraints. The example is deliberately synchronous to isolate the composition issue; it is not the earlier async save port. -->
+
+---
+layout: default
+kicker: Trade-offs
+title: When is it worth it?
+---
+
+- **Learning curve:** teams need shared vocabulary for Results and combinators
+- **More type and adapter plumbing:** error unions, effect layers, and boundary conversions can grow
+- **Debugging and control flow:** long chains and stack traces can be harder to follow than early returns
+- **Not every step needs an abstraction:** use plain functions or imperative code when clearer
+
+<!-- The value depends on domain complexity, failure handling and team familiarity. Prefer small, named steps and explicit boundaries; do not force every workflow into one long pipeline. Reader and Result are tools, not prerequisites for good design. -->
+
+---
+layout: section
+index: "06"
 title: A quick look at ePaper
 ---
 
@@ -1134,28 +1356,27 @@ export const validateScannedPdfWorkflow = hasDependencies<[ReadFileFromIngestSto
 ```
 
 ```ts
-export const validateScannedPdfWorkflow = hasDependencies<[ReadFileFromIngestStorage, MovePdfToValidatedStorage]>()
-(async (
-  [readFileFromIngestStorage, movePdfToValidatedStorage],
-  uploadedPdfFilePath: string,
-  options?: ETagCondition,
-) => {
-  return R.pipe(
-    // Talk to the outside world
-    readFileFromIngestStorage(uploadedPdfFilePath, options),
-    
-    // Pure business logic
-    R.andThen((file) => isZipArchive(file.content) ? extractScannedPdfFromZip(file.content) : R.succeed(file)),
-    R.andThen(R.parse(UploadedPdfSchema)),
-    R.andThrough((file) => R.parse(AllowedExtensionSchema, file.fileName)),
-    R.andThrough((file) => checkPdfForSizeLimit(file.sizeInBytes)),
-    R.andThrough((file) => parseJournalDateFromFileName(file.fileName)),
-    R.andThen(R.parse(ValidatedPdfSchema)),
-    
-    // Talk to the outside world
-    R.andThen((validatedPdf) => movePdfToValidatedStorage(validatedPdf, uploadedPdfFilePath, options)),
+return R.pipe(
+  // Talk to the outside world
+  readFileFromIngestStorage(uploadedPdfFilePath, options),
+  
+  // Pure business logic
+  R.andThen((file) => isZipArchive(file.content) ? extractScannedPdfFromZip(file.content) : R.succeed(file)),
+  
+  // Create a trusted domain value
+  R.andThen(R.parse(UploadedPdfSchema)),
+  
+  // Check invariants
+  R.andThrough((file) => R.parse(AllowedExtensionSchema, file.fileName)),
+  R.andThrough((file) => checkPdfForSizeLimit(file.sizeInBytes)),
+  R.andThrough((file) => parseJournalDateFromFileName(file.fileName)),
+  
+  // Transform to a different domain value
+  R.andThen(R.parse(ValidatedPdfSchema)),
+  
+  // Talk to the outside world
+  R.andThen((validatedPdf) => movePdfToValidatedStorage(validatedPdf, uploadedPdfFilePath, options)),
   )
-})
 ```
 ````
 
@@ -1170,20 +1391,6 @@ title: Custom lint rules
 
 - Show oxlint rules
 - byethrow linting rules
-
----
-layout: default
-aside: Advanced
-kicker: Optional · 4–5 min
-title: Reader Monat as a dependency pattern
----
-
-- A computation that needs an environment
-- Scala `Reader[Env, A]` beside TypeScript `(env: Env) => A`
-- Compose environment-dependent functions
-- Partial application is the starting intuition
-
-<!-- Placeholder for a small verified Scala example and equivalent TypeScript. Reader describes a computation depending on an environment; it does not by itself handle async operations or errors. Keep this clearly optional and avoid assuming a Scala library dependency. -->
 
 ---
 layout: end
@@ -1209,10 +1416,11 @@ title: Sources and inspiration
 - Richard Feldman - [Functional Programming for Pragmatists](https://www.youtube.com/watch?v=3n17wHe5wEw)
 - Rich Hickey - [Simple Made Easy](https://www.youtube.com/watch?v=SxdOUGdseq4)
 - Alexander Granin - [Functional Design and Architecture](https://www.manning.com/books/functional-design-and-architecture)
+- Casey Muratori - [The Big OOPs: Anatomy of a 35-Year Mistake](https://www.youtube.com/watch?v=wo84LFzx5nI)
 
 </div>
 <div style="text-align: center; font-family: var(--font-mono)">
-  <div style="color: var(--accent); font-size: 0.65rem; letter-spacing: 0.1em; margin-bottom: 0.5rem">REPO LINK</div>
+  <div style="color: var(--accent); font-size: 0.65rem; letter-spacing: 0.1em; margin-bottom: 0.5rem">SLIDES</div>
   <a href="https://github.com/JohannesKlauss/functional-domain-modeling" style="display: block; position: relative; padding: 10px; border: 1px solid var(--accent); background: #101010; clip-path: polygon(0 12px, 12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%)">
     <img src="/repository-qr.svg" alt="QR code linking to the presentation repository" style="display: block; width: 100%; filter: invert(1)">
   </a>
