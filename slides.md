@@ -56,33 +56,104 @@ We want to model
 -->
 
 ---
-layout: two-cols
+layout: default
 kicker: Composition over inheritance
-title: How does the system grow?
+title: How does a Inheritance system grow?
 ---
 
-### Inheritance hierarchy
+<div style="display: grid">
+<div v-click-hide="1" style="grid-area: 1 / 1">
+
+```mermaid
+flowchart TB
+  Order
+```
+
+</div>
+
+<div v-click="[1, 2]" style="grid-area: 1 / 1">
+
+```mermaid
+flowchart TB
+  Order --> OnlineOrder & StoreOrder
+```
+
+</div>
+
+<div v-click="[2, 3]" style="grid-area: 1 / 1">
 
 ```mermaid
 flowchart TB
   Order --> OnlineOrder & StoreOrder
   OnlineOrder --> OnlineDiscount[Discounted] & OnlineExpress[Express]
   StoreOrder --> StoreDiscount[Discounted] & StoreExpress[Express]
-  OnlineDiscount -.-> Gift1[+ GiftWrap?]
-  OnlineExpress -.-> Gift2[+ GiftWrap?]
-  StoreDiscount -.-> Gift3[+ GiftWrap?]
-  StoreExpress -.-> Gift4[+ GiftWrap?]
 ```
 
-::right::
+</div>
+<div v-click="3" style="grid-area: 1 / 1">
 
-### Composed workflow
+```mermaid
+flowchart TB
+  Order --> OnlineOrder & StoreOrder
+  OnlineOrder --> OnlineDiscount[Discounted] & OnlineExpress[Express]
+  StoreOrder --> StoreDiscount[Discounted] & StoreExpress[Express]
+  OnlineDiscount
+  OnlineExpress -.-> Loyalty1[+ LoyaltyPoints?]
+  StoreDiscount -.-> Loyalty3[+ LoyaltyPoints?]
+  StoreExpress
+```
+
+</div>
+</div>
+
+<div v-click="3" style="color: var(--accent); font-size: 0.9rem; margin-top: 0.5rem">Where should granting Loyalty points go?</div>
+
+<!--
+Let's imagine:
+Ordering system for your small local shop.
+
+Business goes well -> Online Shop.
+
+Add discounts and express shipping around holidays like christmas.
+
+Add Loyalty Points for recurring customers, but not if they use a discount online or the express checkout of your local shop.
+
+Where does that functionality go?
+-->
+
+---
+layout: default
+kicker: Composition over inheritance
+title: How does the system grow?
+---
+
+### Inheritance hierarchy
+
 
 ```mermaid
 flowchart LR
-  Validate[validate] --> Discount[discount] --> Save[save]
-  Gift[giftWrap] -. add a step .-> Discount
+  Order[Order] --> Channel[OnlineOrder or LocalOrder]
+  Channel --> Discount[applyDiscount if eligible]
+  Discount --> Express[applyExpress if requested]
+  Express --> Loyalty[grantLoyaltyPoints if eligible]
 ```
+
+- Small functions transform the order type
+
+- each handles its own applicable rule.
+
+<!--
+Let's imagine:
+Ordering system for your small local shop.
+
+Business goes well -> Online Shop.
+
+Add discounts and express shipping around holidays like christmas.
+
+Add Loyalty Points for recurring customers, but not if they use a discount online or the express checkout of your local shop.
+
+Where does that functionality go?
+-->
 
 ---
 layout: default
