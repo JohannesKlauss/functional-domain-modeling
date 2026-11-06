@@ -1323,30 +1323,40 @@ function andThen<A, R2, B, E2>(fn: (value: A) => Reader<R2, R.ResultMaybeAsync<B
                   R.andThen((value: A) => fn(value)(deps)),
           )
 }
-
-const getUser = (userId: string): Reader<GetUserDeps, R.ResultAsync<User, "UserTooYoung" | "UserNotFound">> => ({getById, logger}) => {
-  return R.pipe(
-          getById(userId),
-          R.andThrough(user => user.age >= 18 ? R.succeed() : R.fail("UserTooYoung"))
-  )
-}
-
-const getUsersPosts = (user: User): Reader<GetUsersPostsDeps, R.ResultAsync<Post[], "EmptyPosts" | "PostsNotFound">> => ({findForUser, logger}) => {
-  return R.pipe(
-          findForUser(user.id),
-          R.inspect(posts => logger.debug(`found ${posts.length} posts`)),
-          R.andThrough(post => post.length >= 1 ? R.succeed() : R.fail("EmptyPosts"))
-  )
-}
-
-const runProgram = R.pipe(
-        getUser("id1"),
-        andThen(getUsersPosts),
-        map(posts => posts.length)
-)
 ```
 
-<!-- Reader is an environment-dependent function. andThen composes computations that share the same environment; running checkoutReader supplies it once and returns the input-taking workflow from the previous slide. This is a minimal, library-free illustration, not a recommendation to use Reader for two dependencies. It does not itself handle the workflow's Result or asynchronous effects. -->
+<!-- Reader is an environment-dependent function. This andThen explicitly composes Reader with potentially asynchronous Results: it supplies the same environment to each step and chains the Results, skipping the save on failure. Running checkoutReader supplies both dependencies once. This is a minimal illustration, not a recommendation to use Reader for two dependencies. -->
+
+---
+layout: code
+---
+
+```ts
+const prepareCheckout = (input: unknown): Reader<
+  { loadDiscount: LoadDiscount },
+  R.ResultMaybeAsync<PricedOrder, ValidationError | DiscountLookupError | EligibilityError>
+> => ({ loadDiscount }) =>
+  R.pipe(
+    parseCheckout(input),
+    R.andThen(resolveDiscount(loadDiscount)),
+    R.andThrough(checkEligibility),
+    R.map(priceOrder),
+  )
+
+const savePricedOrder = (order: PricedOrder): Reader<
+  { saveOrder: SavePricedOrder }, R.ResultAsync<SavedOrder, SaveOrderError>
+> => ({ saveOrder }) =>
+  saveOrder(order)
+
+const checkoutReader = R.pipe(
+  prepareCheckout(input),
+  andThen(savePricedOrder),
+)
+
+const result = await checkoutReader({ loadDiscount, saveOrder })
+```
+
+<!-- Reader is an environment-dependent function. This andThen explicitly composes Reader with potentially asynchronous Results: it supplies the same environment to each step and chains the Results, skipping the save on failure. Running checkoutReader supplies both dependencies once. This is a minimal illustration, not a recommendation to use Reader for two dependencies. -->
 
 ---
 layout: section
@@ -1453,16 +1463,6 @@ return R.pipe(
 ````
 
 <!-- The supplied validateScannedPdfWorkflow snippet is a candidate for this walkthrough. Confirm it against the project source and trace UploadedPdf → ValidatedPdf, the checks that preserve the input, and the final storage adapter. -->
-
----
-layout: default
-aside: Enforcing patterns
-kicker: Optional · 4–5 min
-title: Custom lint rules
----
-
-- Show oxlint rules
-- byethrow linting rules
 
 ---
 layout: end
