@@ -320,13 +320,13 @@ title: Parse input into a domain value
 steps:
   - { title: Untrusted input, desc: An unknown request arrives }
   - { title: Parse, desc: Enforce domain invariants }
-  - { title: Construct, desc: Return a trusted value object }
+  - { title: Construct, desc: Return a trusted value }
 ---
 
 <!--
-How to define and enforce domain invariants to construct a value object (or aggregate) that the domain can trust as valid?
+How to define and enforce domain invariants to construct a value object (or aggregate) - DDD talks in objects, because they come from OOP, a value object is just a value. that the domain can trust as valid?
 
-Having trusted domain objects removes the need for defensive programming:
+Having trusted domain values removes the need for defensive programming:
 checking validity everywhere, handling errors and failures explicitly <- Amounts to a lot of code **not building the product**
 -->
 
@@ -1265,7 +1265,7 @@ type SavePricedOrder = (
 ```
 ````
 
-<!-- Ask which methods checkout needs and what happens as more use cases are added. Click to add methods as different use cases accumulate: three, six, then twelve. This table-shaped repository returns persistence rows and forces checkout tests to supply a broad interface, even though checkout needs only a lookup. On the final click, replace the repository with focused ports: load a domain Discount using a validated DiscountCode, and save a PricedOrder. Adapter implementations translate external data at the boundary and return a domain value or an explicit failure; successful values need runtime validation before becoming trusted domain objects. Result and the domain types are illustrative; their exact definitions come later. Repositories can be useful when they represent a coherent domain collection and remain focused. -->
+<!-- Ask which methods checkout needs and what happens as more use cases are added. Click to add methods as different use cases accumulate: three, six, then twelve. This table-shaped repository returns persistence rows and forces checkout tests to supply a broad interface, even though checkout needs only a lookup. On the final click, replace the repository with focused ports: load a domain Discount using a validated DiscountCode, and save a PricedOrder. Adapter implementations translate external data at the boundary and return a domain value or an explicit failure; successful values need runtime validation before becoming trusted domain values. Result and the domain types are illustrative; their exact definitions come later. Repositories can be useful when they represent a coherent domain collection and remain focused. -->
 
 ---
 layout: default
