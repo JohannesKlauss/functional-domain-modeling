@@ -19,6 +19,18 @@ At the end examples from ePaper
 -->
 
 ---
+layout: two-cols
+---
+
+
+<img src="/stock.png"/>
+
+::right::
+
+<img src="/stock_2.png"/>
+
+
+---
 layout: agenda
 kicker: Let's talk about
 title: From domain rules to workflows
@@ -1483,12 +1495,13 @@ title: Sources and inspiration
 <div>
 
 - Scott Wlaschin - [Domain Modeling Made Functional](https://partners.pragprog.com/catalog/517)
+- [Same thing as a talk](https://www.youtube.com/watch?v=P1vES9AgfC4)
 - Debasish Ghosh - [Functional and Reactive Domain Modeling](https://www.oreilly.com/library/view/functional-and-reactive/9781617292248/)
 - Alexis King - [Parse, don't validate](https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/)
 - Richard Feldman - [Functional Programming for Pragmatists](https://www.youtube.com/watch?v=3n17wHe5wEw)
+- Casey Muratori - [The Big OOPs: Anatomy of a 35-Year Mistake](https://www.youtube.com/watch?v=wo84LFzx5nI)
 - Rich Hickey - [Simple Made Easy](https://www.youtube.com/watch?v=SxdOUGdseq4)
 - Alexander Granin - [Functional Design and Architecture](https://www.manning.com/books/functional-design-and-architecture)
-- Casey Muratori - [The Big OOPs: Anatomy of a 35-Year Mistake](https://www.youtube.com/watch?v=wo84LFzx5nI)
 
 </div>
 <div style="text-align: center; font-family: var(--font-mono)">
@@ -1501,3 +1514,9 @@ title: Sources and inspiration
 </div>
 
 <!-- The talk draws on both books but focuses on domain modeling and composition, not on all aspects of reactive systems. -->
+
+---
+layout: default
+---
+
+<img src="/wlaschin.webp"/>
