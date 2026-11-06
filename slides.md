@@ -605,7 +605,7 @@ subtitle: What can go wrong, and how does the caller know?
 
 <!--
 Bridge from safeParse: validation can fail, so how do we make that failure part of the contract?
--->
+--> 
 
 ---
 layout: code
@@ -713,7 +713,7 @@ const parseOrder = R.fn({
 
 const result = parseOrder(input) // will never throw
 
-export class JsonParsingError extends ErrorFactory({
+class JsonParsingError extends ErrorFactory({
   name: "JsonParsingError",
   message: ({ input }) => `Unable to parse '${input}' to JSON.`,
   fields: ErrorFactory.fields<{ input: string }>(),
@@ -731,7 +731,7 @@ const parseOrder = R.fn({
 
 const result = parseOrder(input) // will never throw
 
-export class JsonParsingError extends ErrorFactory({
+class JsonParsingError extends ErrorFactory({
   name: "JsonParsingError",
   message: ({ input }) => `Unable to parse '${input}' to JSON.`,
   fields: ErrorFactory.fields<{ input: string }>(),
@@ -793,17 +793,39 @@ kicker: A first look at monads
 title: Think of an array as a box
 ---
 
+````md magic-move
 ```ts
 const boxed = [2]
 const doubled = boxed.map(n => n * 2)         // [4]
 const choices = boxed.flatMap(n => [n, n * 2]) // [2, 4]
 ```
+````
 
 - **Box:** an array holds zero, one, or many values
 - **map:** transform each value, keeping the array context
-- **flatMap:** chain a function that returns arrays into one array
+- **flatMap:** chain a function that return array and flatten it into one array
 
 <!-- The box is an analogy, not a definition: an array can hold multiple values. A monad also has a way to put a value in the context, such as [value], and a flatMap operation for chaining contextual computations. These operations must obey the monad laws. Result follows the same broad pattern, but its context represents success or failure instead of multiple values. -->
+
+---
+layout: default
+kicker: A first look at monads
+title: Think of a Result as a box
+---
+
+```ts
+import { Result as R } from '@praha/byethrow'
+
+const boxed = R.succeed(2)
+const doubled = R.pipe(boxed, R.map(n => n * 2))
+const chained = R.pipe(boxed, R.andThen(n => R.succeed(n * 2)))
+```
+
+- **Box:** a Result holds either a success value or a failure
+- **map:** transform the success value, keeping the Result context
+- **andThen:** chain a function that returns a Result; failures skip the next step
+
+<!-- Like array flatMap, andThen avoids nesting the context. Unlike an array, a Result represents either one success or one failure, not a collection of values. Both examples produce a success containing 4. -->
 
 ---
 layout: section
@@ -813,7 +835,11 @@ title: Model workflows as pipelines
 subtitle: Each step transforms a meaningful domain value.
 ---
 
-<!-- Imperative-to-pipeline comparison: approximately 7 minutes. -->
+<!--
+Now we are able to enforce domain invariants, create trusted domain types and treat errors as values rather than throwing everywhere.
+
+We can trust our type signatures a bit more. And we saw how we can box values to describe behavior declaratively instead of imperative steps
+-->
 
 ---
 layout: code
@@ -946,7 +972,13 @@ const checkout: (input: unknown) => R.ResultAsync<
 ```
 ````
 
-<!-- Start with safeParse, discount lookup, business rules, pricing and persistence together. Extract pricing, then discount lookup and eligibility; their behavior has not changed. Next extract parsing and separate the eligibility check: resolveDiscount carries the validated cart, subtotal and optional discount in a decision for the later steps. Then change parsing, discount resolution and eligibility one at a time to return Results, keeping imperative early returns. Finally saveOrder is an adapter returning a Result; it translates expected persistence failures at the boundary. The no-code path remains valid, while unknown and ineligible codes fail. Validation now returns a descriptive failure instead of undefined; other unexpected exceptions or rejections still need appropriate handling. Helper implementations and types omitted from later frames are illustrative, not the final checkout code. -->
+<!--
+Code I see everywhere.
+
+Business log mangled with external service calls (discountRepository)
+
+Throws and early undefined returns
+-->
 
 ---
 layout: default
@@ -1023,7 +1055,7 @@ async function checkout(input: unknown) {
 ```ts
 async function checkout(input: unknown) {
   return R.pipe(
-    parseCheckout(input),           // <- Kick off a transformation
+    parseCheckout(input),           // <- create a Result
     R.andThen(resolveDiscount),
     R.andThrough(checkEligibility),
     R.map(priceOrder),
@@ -1036,7 +1068,7 @@ async function checkout(input: unknown) {
 async function checkout(input: unknown) {
   return R.pipe(
     parseCheckout(input),          
-    R.andThen(resolveDiscount),     // <- Operate on the Success value otherwise return Error
+    R.andThen(resolveDiscount),     // <- Operate on the Success value or return Error of previous Result
     R.andThrough(checkEligibility),
     R.map(priceOrder),
     R.andThen(saveOrder),
@@ -1049,7 +1081,7 @@ async function checkout(input: unknown) {
   return R.pipe(
     parseCheckout(input),          
     R.andThen(resolveDiscount),     
-    R.andThrough(checkEligibility), // <- Check domain invariants otherwise return Error
+    R.andThrough(checkEligibility), // <- Check domain invariants otherwise return Error of previous Result
     R.map(priceOrder),
     R.andThen(saveOrder),
   )
@@ -1075,13 +1107,17 @@ async function checkout(input: unknown) {
     R.andThen(resolveDiscount),     
     R.andThrough(checkEligibility), 
     R.map(priceOrder),              
-    R.andThen(saveOrder),           // <- Chain a fallible save
+    R.andThen(saveOrder),           // <- Talk to the outside world
   )
 }
 ```
 ````
 
-<!-- Illustrative contracts matching the imperative example, not the final checkout code. R.pipe passes values left to right. R.andThen chains fallible sync or async steps; R.andThrough keeps the input on a successful check; R.map transforms a successful value with a pure function. Failures skip later steps. Handle result at the boundary. Throws and promise rejections are not automatically captured: wrap appropriate APIs. Good imperative code can also be clear; the benefit here is explicit composition, not pipelines for their own sake. -->
+<!--
+All these functions return a Result type so how can we take advantage of that?
+
+Piping, you probably do this in your terminal all the time
+-->
 
 ---
 layout: two-cols
@@ -1152,72 +1188,6 @@ title: What did the pipeline give us?
 - Smaller steps can be tested and reused independently
 
 <!-- Ask the audience to compare with the early-return version. Both approaches can be readable and testable; combinators centralize the repeated success/failure plumbing, at the cost of learning the abstraction. -->
-
----
-layout: code
-kicker: Pipeline pitfalls
-title: Do not use failure to skip a normal branch
----
-
-```ts
-const resolveDiscount = (loadDiscount: LoadDiscount) => (
-  checkout: ValidatedCheckout,
-): R.ResultAsync<CheckoutWithDiscountDecision, DiscountLookupError> => {
-  if (checkout.discountCode === null) {
-    return Promise.resolve(R.succeed({ ...checkout, discount: null }))
-  }
-  return R.pipe(
-    loadDiscount(checkout.discountCode),
-    R.map(discount => ({ ...checkout, discount })),
-  )
-}
-```
-
-- No code supplied is a valid decision: **continue to pricing**
-- An unknown or ineligible supplied code is a failure: **stop checkout**
-
-<!-- Contrast this with returning a failure such as NoDiscount to skip the lookup: every later andThen, andThrough and map would also be skipped, including pricing and saving. Branch inside the step and return a success containing the unchanged or appropriately transformed domain value. Failure can be appropriate for a genuine early exit, but do not disguise ordinary branching as an error. -->
-
----
-layout: code
-kicker: Pipeline pitfalls
-title: Do not overwrite an earlier failure
----
-
-```ts
-R.pipe(
-  parseCheckout(input),
-  R.andThen(resolveDiscount(loadDiscount)),
-  R.mapError(() => new Error('Discount lookup failed')),
-)
-```
-
-A validation failure also becomes “Discount lookup failed”.
-
-```ts
-R.pipe(
-  parseCheckout(input),
-  R.andThen(checkout => R.pipe(
-    resolveDiscount(loadDiscount)(checkout),
-    R.mapError(cause => new Error('Discount lookup failed', { cause })),
-  )),
-)
-```
-
-<!-- mapError applies to any failure reaching that point, including failures from earlier steps whose success callbacks were skipped. Mapping inside the discount step limits the translation to lookup failures; preserving cause retains diagnostic context. Alternatively, leave the original error unchanged. Translating all errors at a boundary can be intentional, but retain the distinctions and details that callers or logs need. -->
-
----
-layout: default
-kicker: Pipeline pitfalls
-title: What can still go wrong?
----
-
-- **Thrown exceptions or rejected promises escape** unless explicitly captured at a boundary
-- **The wrong combinator loses intent:** use `map` for a pure transformation, `andThen` for a fallible step, `andThrough` for a check that preserves its input
-- **The first failure stops the chain:** validate independently when you need to report multiple errors
-- **Decoded JSON is still untrusted:** validate its shape and value invariants before using it
-
-<!-- R.fn or R.try can adapt a throwing API, but a Result pipeline does not catch arbitrary exceptions automatically. Use a validation strategy that accumulates independent errors when the user needs all of them; sequential dependent steps still require short-circuiting. Choose recovery deliberately rather than silently turning every failure into a default. -->
 
 ---
 layout: section
@@ -1344,25 +1314,39 @@ title: Compose computations that need an environment
 ---
 
 ```ts
-type Reader<Env, A> = (env: Env) => A
+type Reader<R, A> = (deps: R) => A
 
-const flatMap = <Env, A, B>(
-  reader: Reader<Env, A>,
-  next: (value: A) => Reader<Env, B>,
-): Reader<Env, B> => env => next(reader(env))(env)
+function andThen<A, R2, B, E2>(fn: (value: A) => Reader<R2, R.ResultMaybeAsync<B, E2>>) {
+  return <R1, E1>(reader: Reader<R1, R.ResultMaybeAsync<A, E1>>): Reader<R1 & R2, R.ResultMaybeAsync<B, E1 | E2>> =>
+          deps => R.pipe(
+                  reader(deps),
+                  R.andThen((value: A) => fn(value)(deps)),
+          )
+}
 
-const getLoad: Reader<CheckoutDependencies, LoadDiscount> =
-  env => env.loadDiscount
-const getSave: Reader<CheckoutDependencies, SavePricedOrder> =
-  env => env.saveOrder
+const getUser = (userId: string): Reader<GetUserDeps, R.ResultAsync<User, "UserTooYoung" | "UserNotFound">> => ({getById, logger}) => {
+  return R.pipe(
+          getById(userId),
+          R.andThrough(user => user.age >= 18 ? R.succeed() : R.fail("UserTooYoung"))
+  )
+}
 
-const checkoutReader = flatMap(getLoad, loadDiscount =>
-  env => checkoutWorkflow({ loadDiscount, saveOrder: getSave(env) }),
+const getUsersPosts = (user: User): Reader<GetUsersPostsDeps, R.ResultAsync<Post[], "EmptyPosts" | "PostsNotFound">> => ({findForUser, logger}) => {
+  return R.pipe(
+          findForUser(user.id),
+          R.inspect(posts => logger.debug(`found ${posts.length} posts`)),
+          R.andThrough(post => post.length >= 1 ? R.succeed() : R.fail("EmptyPosts"))
+  )
+}
+
+const runProgram = R.pipe(
+        getUser("id1"),
+        andThen(getUsersPosts),
+        map(posts => posts.length)
 )
-const runCheckout = checkoutReader({ loadDiscount, saveOrder })
 ```
 
-<!-- Reader is an environment-dependent function. flatMap composes computations that share the same environment; running checkoutReader supplies it once and returns the input-taking workflow from the previous slide. This is a minimal, library-free illustration, not a recommendation to use Reader for two dependencies. It does not itself handle the workflow's Result or asynchronous effects. -->
+<!-- Reader is an environment-dependent function. andThen composes computations that share the same environment; running checkoutReader supplies it once and returns the input-taking workflow from the previous slide. This is a minimal, library-free illustration, not a recommendation to use Reader for two dependencies. It does not itself handle the workflow's Result or asynchronous effects. -->
 
 ---
 layout: section
@@ -1424,7 +1408,7 @@ title: Validate a Scanned PDF
 
 ````md magic-move
 ```ts
-export const validateScannedPdfWorkflow = hasDependencies<[ReadFileFromIngestStorage, MovePdfToValidatedStorage]>()
+const validateScannedPdfWorkflow = hasDependencies<[ReadFileFromIngestStorage, MovePdfToValidatedStorage]>()
 (async (
   [readFileFromIngestStorage, movePdfToValidatedStorage],
   uploadedPdfFilePath: string,
